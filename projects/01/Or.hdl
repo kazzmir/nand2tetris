@@ -15,4 +15,26 @@ CHIP Or {
 
     PARTS:
     // Put your code here:
+    /* a | b | out
+     * 0 | 0 | 0
+     * 1 | 0 | 1 = a and not(b)
+     * 0 | 1 | 1 = not(a) and b
+     * 1 | 1 | 1 = a and b
+     * = (a and not(b)) or (not(a) and b) or (a and b)
+     *
+     * nand(a, b) = not(and(a, b))
+     * not(and(a,b)) = not(a) or not(b)
+     * not(a or b) = not(a) and not(b)
+     * not(a) and not(b) -> w1, not(w1)
+     * a or b = not(not(a) and not(b)) = nand(not(a), not(b))
+     * nand(a, b) -> 1, 1, 1, 0
+     * not(...) -> 0, 0, 0, 1
+     */
+     Not(in=a, out=anot);
+     Not(in=b, out=bnot);
+     /*
+     And(a=anot, b=bnot, out=and1);
+     Not(in=and1, out=out);
+     */
+     Nand(a=anot, b=bnot, out=out);
 }
