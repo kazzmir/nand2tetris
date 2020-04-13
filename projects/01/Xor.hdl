@@ -14,4 +14,23 @@ CHIP Xor {
 
     PARTS:
     // Put your code here:
+
+    /* a | b | out
+     * 0 | 0 | 0
+     * 1 | 0 | 1 = a and not(b)
+     * 0 | 1 | 1 = not(a) and b
+     * 1 | 1 | 0
+     *
+     * (a and not(b)) or (not(a) and b)
+     * w1 = a and not(b)
+     * w2 = not(a) and b
+     */
+
+    NOT(a=a, out=not_a)
+    AND(a=a, b=not_b, out=w1)
+
+    NOT(a=b, out=not_b)
+    AND(a=not_b, b=b, out=w2)
+
+    OR(a=w1, b=w2, out=out);
 }
