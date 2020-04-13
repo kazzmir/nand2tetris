@@ -14,4 +14,11 @@ CHIP Not {
 
     PARTS:
     // Put your code here:
+
+    /* in | out
+     * 0  | 1 = NAND(in, in)
+     * 1  | 0
+     */
+    
+    Nand(a=in, b=in, out=out);
 }
