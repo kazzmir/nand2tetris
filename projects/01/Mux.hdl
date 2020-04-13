@@ -15,4 +15,45 @@ CHIP Mux {
 
     PARTS:
     // Put your code here:
+
+    /* a | b | sel | out
+     * 0 | 0 | 0   | 0
+     * 1 | 0 | 0   | 1 = a and not(b) and not(sel)
+     * 0 | 1 | 0   | 0
+     * 1 | 1 | 0   | 1 = a and b and not(sel)
+     * 0 | 0 | 1   | 0
+     * 1 | 0 | 1   | 0
+     * 0 | 1 | 1   | 1 = not(a) and b and sel
+     * 1 | 1 | 1   | 1 = a and b and sel
+     *
+     * = (a and not(b) and not(sel)) or
+     *   (a and b and not(sel)) or
+     *   (not(a) and b and sel) or
+     *   (a and b and sel)
+     */
+
+    /* not(a) */
+    Not(in=a, out=nota);
+    /* not(b) */
+    Not(in=b, out=notb);
+    /* not(sel) */
+    Not(in=sel, out=notsel);
+
+    /* a and not(b) and not(sel)
+     */
+    And3(a=a, b=notb, c=notsel, out=w1);
+
+    /* a and b and not(sel) */
+    And3(a=a, b=b, c=notsel, out=w2);
+
+    /* (not(a) and b and sel) */
+    And3(a=nota, b=b, c=sel, out=w3);
+
+    /* a and b and sel */
+    And3(a=a, b=b, c=sel, out=w4);
+
+    /* w1 or w2 or w3 or w4 = (w1 or w2) or (w3, w4) */
+    Or(a=w1, b=w2, out=out1);
+    Or(a=w3, b=w4, out=out2);
+    Or(a=out1, b=out2, out=out);
 }
