@@ -1,0 +1,15 @@
+#!/bin/sh
+
+program=./HardwareSimulator.sh
+
+$program Not.tst
+$program And.tst
+$program Xor.tst
+$program Mux.tst
+$program DMux.tst
+$program Not16.tst
+$program And16.tst
+$program Or16.tst
+$program Mux16.tst
+$program Or8Way.tst
+$program Mux4Way16.tst
