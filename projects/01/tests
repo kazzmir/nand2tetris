@@ -14,3 +14,4 @@ $program Mux16.tst
 $program Or8Way.tst
 $program Mux4Way16.tst
 $program Mux8Way16.tst
+$program DMux4Way.tst
