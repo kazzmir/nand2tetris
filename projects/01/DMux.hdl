@@ -15,4 +15,25 @@ CHIP DMux {
 
     PARTS:
     // Put your code here:
+    /* in | sel | a
+     * 0  | 0   | 0
+     * 0  | 1   | 0
+     * 1  | 0   | 1 = in and not(sel)
+     * 1  | 1   | 0
+     *
+     * in | sel | b
+     * 0  | 0   | 0
+     * 0  | 1   | 0
+     * 1  | 0   | 0
+     * 1  | 1   | 1 = in and sel
+     */
+
+    /* not(sel) */
+    Not(in=sel, out=notsel);
+
+    /* a=in and not(sel) */
+    And(a=in, b=notsel, out=a);
+
+    /* b=in and sel */
+    And(a=in, b=sel, out=b);
 }
