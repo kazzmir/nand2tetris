@@ -6,3 +6,4 @@ $program HalfAdder.tst
 $program FullAdder.tst
 $program Add16.tst
 $program Inc16.tst
+$program ALU.tst
