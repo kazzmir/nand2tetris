@@ -6,5 +6,6 @@ CHIP Eq16Zero {
 
   Or8Way(in=in[0..7], out=out1);
   Or8Way(in=in[8..15], out=out2);
-  Or(a=out1, b=out2, out=zero);
+  Or(a=out1, b=out2, out=out3);
+  Not(in=out3, out=zero);
 }
