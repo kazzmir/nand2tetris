@@ -14,4 +14,24 @@ CHIP FullAdder {
 
     PARTS:
     // Put you code here:
+
+    /* a | b | c | sum | carry
+     */
+
+    HalfAdder(a=a, b=b, sum=absum, carry=abcarry);
+    HalfAdder(a=c, b=absum, sum=sum, carry=ccarry);
+    Or(a=abcarry, b=ccarry, out=carry);
+
+    /* a + b + c = 00, 01, 10, 11
+     *
+     *  half(a,b) = sum, carry
+     *  
+     *  c=1, a=0, b=1
+     *  a+b: sum=1, carry=0
+     *  c+sum: sum=0, carry=1
+     *
+     *  c=1, a=1, b=1
+     *  a+b: sum=0, carry=1
+     *  c+sum: sum=1, carry=0
+     */
 }

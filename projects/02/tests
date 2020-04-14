@@ -3,3 +3,4 @@
 program=./HardwareSimulator.sh
 
 $program HalfAdder.tst
+$program FullAdder.tst
