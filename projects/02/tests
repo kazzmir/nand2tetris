@@ -2,6 +2,7 @@
 
 program=./HardwareSimulator.sh
 
+$program Eq16Zero.tst
 $program HalfAdder.tst
 $program FullAdder.tst
 $program Add16.tst
