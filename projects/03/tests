@@ -6,3 +6,4 @@ $program Bit.tst
 $program Register.tst
 $program RAM8.tst
 $program RAM64.tst
+$program RAM512.tst
