@@ -17,4 +17,27 @@ CHIP PC {
 
     PARTS:
     // Put your code here:
+   
+    /* 000 -> old value
+     * 001 -> inc
+     * 010 -> load
+     * 011 -> load
+     * 100 -> reset
+     * 101 -> reset
+     * 110 -> reset
+     * 111 -> reset
+     *
+     * bit[0] = inc
+     * bit[1] = load
+     * bit[2] = reset
+     */
+
+    Inc16(in=pc, out=pc1);
+
+    Mux8Way16(a=pc, b=pc1, c=in, d=in, e=false, f=false, g=false, h=false,
+              sel[0]=inc, sel[1]=load, sel[2]=reset,
+              out=newvalue);
+    
+    Register(in=newvalue, load=true, out=pc, out=out);
+
 }
