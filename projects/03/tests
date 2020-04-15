@@ -5,4 +5,4 @@ program=./HardwareSimulator.sh
 $program Bit.tst
 $program Register.tst
 $program RAM8.tst
-$program RAM16.tst
+$program RAM64.tst
