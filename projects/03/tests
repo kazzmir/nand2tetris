@@ -1,0 +1,6 @@
+#!/bin/sh
+
+program=./HardwareSimulator.sh
+
+$program Bit.tst
+$program Register.tst
