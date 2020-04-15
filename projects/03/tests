@@ -8,3 +8,4 @@ $program RAM8.tst
 $program RAM64.tst
 $program RAM512.tst
 $program RAM4K.tst
+$program RAM16K.tst
