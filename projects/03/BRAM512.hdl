@@ -14,7 +14,7 @@
  * available through the out output starting from the next time step.
  */
 
-CHIP RAM512 {
+CHIP BRAM512 {
 
     IN  in[16], load, address[9];
     OUT out[16];
