@@ -39,5 +39,29 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+
+    /* A instruction
+     * 0 vvv vvvv vvvv vvvv
+     * load ARegister with v's
+     *
+     * C instruction
+     * 111 a c1 c2 c3 c4 c5 c6 d1 d2 d3 j1 j2 j3
+     * a=instruction[12]
+     * jumps=instruction[0..2]
+     * destination=instruction[3..5]
+     * controls=instruction[6..11]
+     */
+
+    Not(in=instruction[15], out=loadA);
+    ARegister(in=instruction, load=loadA, out=aOut, out[0..14]=addressM);
+
+    /* load=d2 */
+    DRegister(in=aluOutput, load=instruction[4], out=dRegisterOut);
+
+    /* Choose the A register or inM based on the 'a' bit, which is instruction[12] */
+    Mux16(a=aOut, b=inM, sel=instruction[12], out=aOrM);
+
+    // ALU(x=dRegisterOut, y=aOrM, ..., out=aluOutput, out=outM);
+
+    PC(in=aOut, load=false, inc=true, reset=reset, out[0..14]=pc);
 }
