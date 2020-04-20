@@ -48,20 +48,66 @@ CHIP CPU {
      * 111 a c1 c2 c3 c4 c5 c6 d1 d2 d3 j1 j2 j3
      * a=instruction[12]
      * jumps=instruction[0..2]
+     *   j1=instruction[2]
+     *   j2=instruction[1]
+     *   j3=instruction[0]
      * destination=instruction[3..5]
+     *   d1=instruction[5]
+     *   d2=instruction[4]
+     *   d3=instruction[3]
      * controls=instruction[6..11]
+     *   c1=instruction[11]
+     *   c2=instruction[10]
+     *   c3=instruction[9]
+     *   c4=instruction[8]
+     *   c5=instruction[7]
+     *   c6=instruction[6]
      */
 
-    Not(in=instruction[15], out=loadA);
-    ARegister(in=instruction, load=loadA, out=aOut, out[0..14]=addressM);
+    Not(in=instruction[15], out=isA);
+    /* selector = d1. either choose alu output, or the incoming instruction */
+    And(a=instruction[15], b=instruction[5], out=useAlu);
+    Mux16(a=instruction, b=aluOutput, sel=useAlu, out=aInput);
+
+    Or(a=isA, b=useAlu, out=loadA);
+
+    ARegister(in=aInput, load=loadA, out=aOut, out[0..14]=addressM);
 
     /* load=d2 */
-    DRegister(in=aluOutput, load=instruction[4], out=dRegisterOut);
+    And(a=instruction[15], b=instruction[4], out=loadD);
+    DRegister(in=aluOutput, load=loadD, out=dRegisterOut);
+
+    /* write to M is d3, only if instruction[15] is 1, meaning a C instruction */
+    And(a=instruction[3], b=instruction[15], out=writeM);
 
     /* Choose the A register or inM based on the 'a' bit, which is instruction[12] */
     Mux16(a=aOut, b=inM, sel=instruction[12], out=aOrM);
 
-    // ALU(x=dRegisterOut, y=aOrM, ..., out=aluOutput, out=outM);
+    ALU(x=dRegisterOut, y=aOrM,
+        zx=instruction[11], nx=instruction[10],
+        zy=instruction[9], ny=instruction[8],
+        f=instruction[7], no=instruction[6],
+        out=aluOutput, out=outM, zr=aluZero, ng=aluNegative);
 
-    PC(in=aOut, load=false, inc=true, reset=reset, out[0..14]=pc);
+    /* load=1 when
+     *   j1 and aluNegative
+     *   j2 and aluZero
+     *   j3 and (not aluNegative and not aluZero)
+     */
+
+    And(a=instruction[2], b=aluNegative, out=jump1);
+    And(a=instruction[1], b=aluZero, out=jump2);
+    /* nand(a, b) = not(and(a, b))
+     * not a and not b = not(a or b)
+     */
+    Or(a=aluNegative, b=aluZero, out=negativeOrZero);
+    Not(in=negativeOrZero, out=notNegativeOrZero);
+    And(a=instruction[0], b=notNegativeOrZero, out=jump3);
+
+    Or(a=jump1, b=jump2, out=jumpx);
+    Or(a=jumpx, b=jump3, out=jumpx1);
+    /* Only load PC if this is a C instruction */
+    And(a=jumpx1, b=instruction[15], out=loadPC);
+
+    PC(in=aOut, load=loadPC, inc=true, reset=reset, out[0..14]=pc);
 }
