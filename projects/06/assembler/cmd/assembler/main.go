@@ -24,8 +24,9 @@ type RawProgram struct {
 }
 
 func (raw *RawProgram) AddLine(line string, sourceLine uint64){
-    if strings.HasPrefix(line, "//") {
-        return
+    if strings.Contains(line, "//") {
+        index := strings.Index(line, "//")
+        line = line[0:index]
     }
 
     trimmed := strings.TrimSpace(line)
@@ -138,6 +139,27 @@ type ParsedProgram struct {
     Code []ParsedCode
 }
 
+func (program *ParsedProgram) FixupLabels(labels *LabelManager) error {
+    for _, code := range program.Code {
+        memory, ok := code.(*ParsedMemoryReference)
+        if ok {
+            if memory.Constant == -1 {
+                label, err := labels.Lookup(memory.LabelReference)
+                if err != nil {
+                    return fmt.Errorf("unknown label '%v'", label)
+                }
+                memory.Constant = label
+            }
+        }
+    }
+
+    return nil
+}
+
+func (program *ParsedProgram) InstructionCount() int32 {
+    return int32(len(program.Code))
+}
+
 func (program *ParsedProgram) ToBinaryString() string {
     var out strings.Builder
     for _, code := range program.Code {
@@ -181,6 +203,21 @@ func parseAssignedVariables(variables string) ([]Register, error) {
 type ParsedConstant struct {
     ParsedExpression
     Value int
+}
+
+func (constant *ParsedConstant) UsesMRegister() bool {
+    return false
+}
+
+func (constant *ParsedConstant) ToComputeBinaryString() string {
+    switch constant.Value {
+        case 0: return "101010"
+        case 1: return "111111"
+        case -1: return "111010"
+        default: fmt.Sprintf("unknown constant %v", constant.Value)
+    }
+
+    return "fail"
 }
 
 type ParsedSingleRegister struct {
@@ -272,6 +309,41 @@ func (binary *ParsedBinary) ToComputeBinaryString() string {
         case OperationSubtract:
             /* d-1, a-1, d-a, a-d */
 
+            left, ok := binary.Left.(*ParsedSingleRegister)
+            if !ok {
+                return "invalid left side of subtract"
+            }
+
+            rightNumber, ok := binary.Right.(*ParsedConstant)
+            if ok {
+                /* d-1, a-1 */
+
+                if rightNumber.Value != 1 {
+                    return "invalid subtract constant"
+                }
+
+                switch left.Register {
+                    case DRegister: return "001110"
+                    case ARegister, MRegister: return "110010"
+                }
+
+            } else {
+                /* a-d, d-a */
+                rightRegister, ok := binary.Right.(*ParsedSingleRegister)
+                if !ok {
+                    return "invalid right side of subtract"
+                }
+
+                if left.Register == DRegister && (rightRegister.Register == ARegister || rightRegister.Register == MRegister) {
+                    return "010011"
+                }
+                if (left.Register == ARegister || left.Register == MRegister) && rightRegister.Register == DRegister {
+                    return "000111"
+                }
+
+                return fmt.Sprintf("[unknown subtraction between %v and %v]", left.Register, rightRegister.Register)
+            }
+
             return "unimplemented subtract"
         case OperationBinaryAnd:
             /* d&a */
@@ -344,15 +416,14 @@ func maybeParseOperation(register Register, expression string) (ParsedExpression
     var rightValue ParsedExpression
 
     switch right {
-        case '0': rightValue = ParsedConstant{Value: 0}
-        case '1': rightValue = ParsedConstant{Value: 1}
+        case '0': rightValue = &ParsedConstant{Value: 0}
+        case '1': rightValue = &ParsedConstant{Value: 1}
         default:
-            var err error
-            register, err = parseRegister(rune(right))
+            rightRegister, err := parseRegister(rune(right))
             if err != nil {
                 return nil, err
             }
-            rightValue = &ParsedSingleRegister{Register: register}
+            rightValue = &ParsedSingleRegister{Register: rightRegister}
     }
 
     if rightValue == nil {
@@ -415,24 +486,102 @@ func parseAssignment(raw RawCode) (ParsedAssignment, error) {
     }, nil
 }
 
+type Jump int
+const (
+    JGT Jump = iota
+    JEQ
+    JLT
+    JNE
+    JLE
+    JMP
+    NoJump
+    InvalidJump
+)
+
+func parseJumpType(jump string) (Jump, error) {
+    switch jump {
+        case "null": return NoJump, nil
+        case "JGT": return JGT, nil
+        case "JEQ": return JEQ, nil
+        case "JLT": return JLT, nil
+        case "JNE": return JNE, nil
+        case "JLE": return JLE, nil
+        case "JMP": return JMP, nil
+        default: return InvalidJump, fmt.Errorf("unknown jump type '%v'", jump)
+    }
+}
+
 type ParsedJump struct {
     ParsedExpression
+
+    Expression ParsedExpression
+    Jump Jump
 }
 
 func (jump *ParsedJump) ToBinaryString() string {
-    return "jump unimplemented"
+    var out strings.Builder
+
+    out.WriteString("111")
+
+    usesM := jump.Expression.UsesMRegister()
+
+    if usesM {
+        out.WriteRune('1')
+    } else {
+        out.WriteRune('0')
+    }
+
+    out.WriteString(jump.Expression.ToComputeBinaryString())
+
+    /* no destination */
+    out.WriteString("000")
+
+    switch jump.Jump {
+        case NoJump: out.WriteString("000")
+        case JGT: out.WriteString("001")
+        case JEQ: out.WriteString("010")
+        case JLT: out.WriteString("100")
+        case JNE: out.WriteString("101")
+        case JLE: out.WriteString("110")
+        case JMP: out.WriteString("111")
+        default:
+            out.WriteString("invalid jump")
+    }
+
+    return out.String()
 }
 
 func parseJump(code RawCode) (ParsedJump, error) {
     /* jump := value ; jump_op
-     * jump_op := null | JGT | JEQ | JLT | JNE | JLE JMP
+     * jump_op := null | JGT | JEQ | JLT | JNE | JLE | JMP
      */
-    return ParsedJump{}, fmt.Errorf("unimplemented")
+    parts := strings.Split(code.Text, ";")
+    if len(parts) != 2 {
+        return ParsedJump{}, fmt.Errorf("expected a jump to be separated by a ;")
+    }
+    expression := parts[0]
+    jump := parts[1]
+
+    parsedExpression, err := parseExpression(expression)
+    if err != nil {
+        return ParsedJump{}, err
+    }
+
+    parsedJump, err := parseJumpType(jump)
+    if err != nil {
+        return ParsedJump{}, err
+    }
+
+    return ParsedJump{
+        Expression: parsedExpression,
+        Jump: parsedJump,
+    }, nil
 }
 
 type ParsedMemoryReference struct {
     ParsedCode
     Constant int32
+    LabelReference string // reference to a label
 }
 
 func (memory *ParsedMemoryReference) ToBinaryString() string {
@@ -460,7 +609,58 @@ func parseMemoryConstant(value string) (int32, error) {
     return int32(out), err
 }
 
-func parseMemoryReference(code RawCode) (ParsedMemoryReference, error) {
+func isSpecialMemory(value string) bool {
+    switch value {
+        case "SCREEN", "KBD", "THIS", "THAT", "SP", "LCL", "ARG": return true
+        default: return false
+    }
+}
+
+func isRamSlot(ram string) bool {
+    if len(ram) == 0 {
+        return false
+    }
+
+    if ram[0] != 'R' {
+        return false
+    }
+
+    if !isNumber(ram[1:]) {
+        return false
+    }
+
+    return true
+}
+
+func parseRamSlot(ram string) int32 {
+    value, err := strconv.Atoi(ram[1:])
+    if err != nil {
+        return -1
+    }
+    return int32(value)
+}
+
+type VariableAllocator struct {
+    CurrentSlot int32
+    Mapping map[string]int32
+}
+
+func (allocator *VariableAllocator) Get(variable string) int32 {
+    slot, ok := allocator.Mapping[variable]
+    if ok {
+        return slot
+    }
+
+    allocator.Mapping[variable] = allocator.CurrentSlot
+    allocator.CurrentSlot += 1
+    return allocator.Mapping[variable]
+}
+
+func isAllCaps(value string) bool {
+    return value == strings.ToUpper(value)
+}
+
+func parseMemoryReference(code RawCode, variableAllocator *VariableAllocator) (ParsedMemoryReference, error) {
     line := code.Text
 
     if len(line) == 0 {
@@ -480,11 +680,70 @@ func parseMemoryReference(code RawCode) (ParsedMemoryReference, error) {
         return ParsedMemoryReference{Constant: parsed}, nil
     }
 
-    return ParsedMemoryReference{}, fmt.Errorf("unimplemented memory reference on line %v", code.SourceLine)
+    if isRamSlot(value) {
+        return ParsedMemoryReference{Constant: parseRamSlot(value)}, nil
+    }
+
+    /* could be a variable reference, a label reference, or a special reference like
+     * SCREEN, KBD, etc
+     */
+
+    if isAllCaps(value) {
+        if isSpecialMemory(value) {
+            return ParsedMemoryReference{}, fmt.Errorf("unimplemented special memory reference on line %v '%v'", code.SourceLine, code.Text)
+        }
+
+        return ParsedMemoryReference{LabelReference: value, Constant: -1}, nil
+
+    } else {
+        ram := variableAllocator.Get(value)
+        return ParsedMemoryReference{Constant: ram}, nil
+    }
+
+    return ParsedMemoryReference{}, fmt.Errorf("unimplemented memory reference on line %v '%v'", code.SourceLine, code.Text)
+}
+
+type LabelManager struct {
+    Labels map[string]int32
+}
+
+func (manager *LabelManager) Lookup(label string) (int32, error) {
+    value, ok := manager.Labels[label]
+    if !ok {
+        return -1, fmt.Errorf("unknown label '%v'", label)
+    }
+    return value, nil
+}
+
+func (manager *LabelManager) SetLabel(label string, count int32) error {
+    _, ok := manager.Labels[label]
+    if ok {
+        return fmt.Errorf("Existing label named '%v'", label)
+    }
+
+    manager.Labels[label] = count
+    return nil
+}
+
+func parseLabel(raw RawCode) (string, error) {
+    label := raw.Text
+    if strings.HasPrefix(label, "(") && strings.HasSuffix(label, ")") {
+        return label[1:len(label)-1], nil
+    } else {
+        return "", fmt.Errorf("unknown label syntax '%v'", label)
+    }
 }
 
 func parse(raw RawProgram) (ParsedProgram, error) {
-    // variableAllocator := 16
+    variableAllocator := VariableAllocator{
+        CurrentSlot: 16,
+        Mapping: make(map[string]int32),
+    }
+
+    labelManager := LabelManager {
+        Labels: make(map[string]int32),
+    }
+
     var parsed ParsedProgram
 
     for _, code := range raw.Code {
@@ -507,15 +766,23 @@ func parse(raw RawProgram) (ParsedProgram, error) {
             }
             parsed.Add(&converted)
         } else if strings.HasPrefix(code.Text, "@") {
-            converted, err := parseMemoryReference(code)
+            converted, err := parseMemoryReference(code, &variableAllocator)
             if err != nil {
                 return parsed, err
             }
             parsed.Add(&converted)
+        } else if strings.HasPrefix(code.Text, "(") {
+            label, err := parseLabel(code)
+            if err != nil {
+                return parsed, err
+            }
+            labelManager.SetLabel(label, parsed.InstructionCount())
         } else {
             return parsed, fmt.Errorf("Error line %v: unknown line '%v'", code.SourceLine, code.Text)
         }
     }
+
+    parsed.FixupLabels(&labelManager)
 
     return parsed, nil
 }
