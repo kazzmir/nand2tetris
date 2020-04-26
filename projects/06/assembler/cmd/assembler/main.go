@@ -4,6 +4,7 @@ import (
     "os"
     "fmt"
     "flag"
+    "io/ioutil"
     "bufio"
     "strings"
     "strconv"
@@ -70,7 +71,7 @@ const (
 )
 
 type ParsedExpression interface {
-    UsesARegister() bool
+    UsesMRegister() bool
     ToComputeBinaryString() string
 }
 
@@ -85,12 +86,12 @@ func (assignment *ParsedAssignment) ToBinaryString() string {
     var out strings.Builder
     out.WriteString("111")
 
-    usesA := assignment.Expression.UsesARegister()
+    usesM := assignment.Expression.UsesMRegister()
 
-    if usesA {
-        out.WriteRune('0')
-    } else {
+    if usesM {
         out.WriteRune('1')
+    } else {
+        out.WriteRune('0')
     }
 
     out.WriteString(assignment.Expression.ToComputeBinaryString())
@@ -106,6 +107,8 @@ func (assignment *ParsedAssignment) ToBinaryString() string {
             case MRegister: assignM = true
         }
     }
+
+    // fmt.Printf("d=%v m=%v a=%v\n", assignD, assignM, assignA)
 
     if assignA {
         out.WriteRune('1')
@@ -135,10 +138,12 @@ type ParsedProgram struct {
     Code []ParsedCode
 }
 
-func (program *ParsedProgram) DumpAsBinaryString() {
+func (program *ParsedProgram) ToBinaryString() string {
+    var out strings.Builder
     for _, code := range program.Code {
-        fmt.Printf("%v\n", code.ToBinaryString())
+        out.WriteString(fmt.Sprintf("%v\n", code.ToBinaryString()))
     }
+    return out.String()
 }
 
 func (program *ParsedProgram) Add(code ParsedCode) {
@@ -194,8 +199,8 @@ func (register *ParsedSingleRegister) ToComputeBinaryString() string {
     }
 }
 
-func (register *ParsedSingleRegister) UsesARegister() bool {
-    return register.Register == ARegister
+func (register *ParsedSingleRegister) UsesMRegister() bool {
+    return register.Register == MRegister
 }
 
 type ParsedUnary struct {
@@ -204,8 +209,8 @@ type ParsedUnary struct {
     Value ParsedExpression
 }
 
-func (unary *ParsedUnary) UsesARegister() bool {
-    return unary.Value.UsesARegister()
+func (unary *ParsedUnary) UsesMRegister() bool {
+    return unary.Value.UsesMRegister()
 }
 
 type ParsedBinary struct {
@@ -279,8 +284,8 @@ func (binary *ParsedBinary) ToComputeBinaryString() string {
     }
 }
 
-func (binary *ParsedBinary) UsesARegister() bool {
-    return binary.Left.UsesARegister() || binary.Right.UsesARegister()
+func (binary *ParsedBinary) UsesMRegister() bool {
+    return binary.Left.UsesMRegister() || binary.Right.UsesMRegister()
 }
 
 func parseNegation(expression string) (ParsedExpression, error) {
@@ -515,6 +520,20 @@ func parse(raw RawProgram) (ParsedProgram, error) {
     return parsed, nil
 }
 
+func replaceExtension(path string, extension string) string {
+    parts := strings.Split(path, ".")
+    return fmt.Sprintf("%v.%v", parts[0], extension)
+}
+
+func writeToHack(data string, asmPath string) error {
+    hackPath := replaceExtension(asmPath, "hack")
+    err := ioutil.WriteFile(hackPath, []byte(data), 0644)
+    if err == nil {
+        fmt.Printf("Assembled to %v\n", hackPath)
+    }
+    return err
+}
+
 func process(path string) error {
     fmt.Printf("Assembling '%v'\n", path)
 
@@ -548,9 +567,10 @@ func process(path string) error {
         return err
     }
 
-    parsed.DumpAsBinaryString()
+    fmt.Printf("%v", parsed.ToBinaryString())
 
-    return nil
+    err = writeToHack(parsed.ToBinaryString(), path)
+    return err
 }
 
 func help() {
