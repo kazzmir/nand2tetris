@@ -56,7 +56,18 @@ const (
     InvalidRegister
 )
 
-type ParsedExpression struct {
+type Operation int
+const (
+    OperationAdd Operation = iota
+    OperationSubtract
+    OperationBinaryAnd
+    OperationBinaryOr
+    OperationNegate
+    OperationNot
+    InvalidOperation
+)
+
+type ParsedExpression interface {
 }
 
 type ParsedAssignment struct {
@@ -102,8 +113,128 @@ func parseAssignedVariables(variables string) ([]Register, error) {
     return out, nil
 }
 
+type ParsedConstant struct {
+    ParsedExpression
+    Value int
+}
+
+type ParsedSingleRegister struct {
+    ParsedExpression
+    Register Register
+}
+
+type ParsedUnary struct {
+    ParsedExpression
+    Operation Operation
+    Value ParsedExpression
+}
+
+type ParsedBinary struct {
+    ParsedExpression
+    Operation Operation
+    Left ParsedExpression
+    Right ParsedExpression
+}
+
+func parseNegation(expression string) (ParsedExpression, error) {
+    if len(expression) == 0 {
+        return nil, fmt.Errorf("no expression given after the '-' sign")
+    }
+
+    if expression[0] == '1' {
+        return &ParsedConstant{Value: -1}, nil
+    }
+
+    register, err := parseRegister(rune(expression[0]))
+    if err != nil {
+        return nil, err
+    }
+
+    return ParsedUnary{Operation: OperationNegate, Value: register}, nil
+}
+
+func parseNot(expression string) (ParsedExpression, error) {
+    if len(expression) == 0 {
+        return nil, fmt.Errorf("no expression given after '!'")
+    }
+
+    register, err := parseRegister(rune(expression[0]))
+
+    if err != nil {
+        return nil, err
+    }
+
+    return ParsedUnary{Operation: OperationNot, Value: register}, nil
+}
+
+func maybeParseOperation(register Register, expression string) (ParsedExpression, error) {
+    if len(expression) == 0 {
+        return ParsedSingleRegister{Register: register}, nil
+    }
+
+    if len(expression) != 2 {
+        return nil, fmt.Errorf("expected an operation and a value: '%v'", expression)
+    }
+
+    var op = expression[0]
+    var right = expression[1]
+
+    var operation Operation
+
+    switch op {
+        case '+': operation = OperationAdd
+        case '-': operation = OperationSubtract
+        case '&': operation = OperationBinaryAnd
+        case '|': operation = OperationBinaryOr
+        default: return nil, fmt.Errorf("invalid operation '%v'", expression[0])
+    }
+
+    var rightValue ParsedExpression
+
+    switch right {
+        case '0': rightValue = ParsedConstant{Value: 0}
+        case '1': rightValue = ParsedConstant{Value: 1}
+        default:
+            var err error
+            rightValue, err = parseRegister(rune(right))
+            if err != nil {
+                return nil, err
+            }
+    }
+
+    if rightValue == nil {
+        return nil, fmt.Errorf("expected a value to follow the operation")
+    }
+
+    return ParsedBinary{Operation: operation, Left: register, Right: rightValue}, nil
+}
+
 func parseExpression(expression string) (ParsedExpression, error) {
-    return ParsedExpression{}, fmt.Errorf("unimplemented")
+    /* expression := variable op one-or-variable | 0 | 1 | -1 | variable | ! variable | - variable
+     * variable = A | M | D
+     * one-or-variable = variable | 0 | 1
+     * op = + | - | & | '|'
+     *
+     * the same variable cannot appear twice, such as D+D
+     */
+
+    if len(expression) == 0 {
+        return nil, fmt.Errorf("no expression given")
+    }
+
+    switch expression[0] {
+        case '0': return &ParsedConstant{Value: 0}, nil
+        case '1': return &ParsedConstant{Value: 1}, nil
+        case '-': return parseNegation(expression[1:])
+        case '!': return parseNot(expression[1:])
+    }
+
+    register1, err := parseRegister(rune(expression[0]))
+    if err != nil {
+        return nil, err
+    }
+
+    return maybeParseOperation(register1, expression[1:])
 }
 
 func parseAssignment(raw RawCode) (ParsedAssignment, error) {
@@ -114,11 +245,11 @@ func parseAssignment(raw RawCode) (ParsedAssignment, error) {
 
     assigned, err := parseAssignedVariables(parts[0])
     if err != nil {
-        return ParsedAssignment{}, fmt.Errorf("Error line %v: %v", raw.SourceLine, err)
+        return ParsedAssignment{}, fmt.Errorf("Error line %v: '%v' %v", raw.SourceLine, raw.Text, err)
     }
-    expression, err := parseExpression(parts[1])
+    expression, err := parseExpression(strings.TrimSpace(parts[1]))
     if err != nil {
-        return ParsedAssignment{}, fmt.Errorf("Error line %v: %v", raw.SourceLine, err)
+        return ParsedAssignment{}, fmt.Errorf("Error line %v: '%v' %v", raw.SourceLine, raw.Text, err)
     }
 
     return ParsedAssignment{
