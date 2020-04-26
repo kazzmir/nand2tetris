@@ -140,15 +140,23 @@ type ParsedProgram struct {
 }
 
 func (program *ParsedProgram) FixupLabels(labels *LabelManager) error {
+    variableAllocator := VariableAllocator{
+        CurrentSlot: 16,
+        Mapping: make(map[string]int32),
+    }
+
     for _, code := range program.Code {
         memory, ok := code.(*ParsedMemoryReference)
         if ok {
             if memory.Constant == -1 {
                 label, err := labels.Lookup(memory.LabelReference)
+
+                /* If its not a defined label then it must have been a variable */
                 if err != nil {
-                    return fmt.Errorf("unknown label '%v'", label)
+                    memory.Constant = variableAllocator.Get(memory.LabelReference)
+                } else {
+                    memory.Constant = label
                 }
-                memory.Constant = label
             }
         }
     }
@@ -244,6 +252,40 @@ type ParsedUnary struct {
     ParsedExpression
     Operation Operation
     Value ParsedExpression
+}
+
+func (unary *ParsedUnary) ToComputeBinaryString() string {
+    switch unary.Operation {
+        case OperationNot:
+            register, ok := unary.Value.(*ParsedSingleRegister)
+            if !ok {
+                return "invalid unary operation"
+            }
+
+            switch register.Register {
+                case DRegister: return "0011001"
+                case ARegister, MRegister: return "110001"
+            }
+
+            return "invalid unary operation"
+
+        case OperationNegate:
+            register, ok := unary.Value.(*ParsedSingleRegister)
+            if !ok {
+                return "invalid unary operation"
+            }
+
+            switch register.Register {
+                case DRegister: return "001111"
+                case ARegister, MRegister: return "110011"
+            }
+
+            return "invalid unary operation"
+
+        default: fmt.Sprintf("unimplemented operation %v", unary.Operation)
+    }
+
+    return "invalid unary operation"
 }
 
 func (unary *ParsedUnary) UsesMRegister() bool {
@@ -347,10 +389,11 @@ func (binary *ParsedBinary) ToComputeBinaryString() string {
             return "unimplemented subtract"
         case OperationBinaryAnd:
             /* d&a */
-            return "unimplemented and"
+            return "000000"
         case OperationBinaryOr:
             /* d|a */
-            return "unimplemented or"
+            /* FIXME: check the registers */
+            return "010101"
         default:
             return "invalid operation"
     }
@@ -491,6 +534,7 @@ const (
     JGT Jump = iota
     JEQ
     JLT
+    JGE
     JNE
     JLE
     JMP
@@ -503,6 +547,7 @@ func parseJumpType(jump string) (Jump, error) {
         case "null": return NoJump, nil
         case "JGT": return JGT, nil
         case "JEQ": return JEQ, nil
+        case "JGE": return JGE, nil
         case "JLT": return JLT, nil
         case "JNE": return JNE, nil
         case "JLE": return JLE, nil
@@ -540,6 +585,7 @@ func (jump *ParsedJump) ToBinaryString() string {
         case NoJump: out.WriteString("000")
         case JGT: out.WriteString("001")
         case JEQ: out.WriteString("010")
+        case JGE: out.WriteString("011")
         case JLT: out.WriteString("100")
         case JNE: out.WriteString("101")
         case JLE: out.WriteString("110")
@@ -660,7 +706,7 @@ func isAllCaps(value string) bool {
     return value == strings.ToUpper(value)
 }
 
-func parseMemoryReference(code RawCode, variableAllocator *VariableAllocator) (ParsedMemoryReference, error) {
+func parseMemoryReference(code RawCode) (ParsedMemoryReference, error) {
     line := code.Text
 
     if len(line) == 0 {
@@ -690,14 +736,21 @@ func parseMemoryReference(code RawCode, variableAllocator *VariableAllocator) (P
 
     if isAllCaps(value) {
         if isSpecialMemory(value) {
+            switch value {
+                case "SP": return ParsedMemoryReference{Constant: 0}, nil
+                case "LCL": return ParsedMemoryReference{Constant: 1}, nil
+                case "ARG": return ParsedMemoryReference{Constant: 2}, nil
+                case "THIS": return ParsedMemoryReference{Constant: 3}, nil
+                case "THAT": return ParsedMemoryReference{Constant: 4}, nil
+            }
+
             return ParsedMemoryReference{}, fmt.Errorf("unimplemented special memory reference on line %v '%v'", code.SourceLine, code.Text)
         }
 
         return ParsedMemoryReference{LabelReference: value, Constant: -1}, nil
 
     } else {
-        ram := variableAllocator.Get(value)
-        return ParsedMemoryReference{Constant: ram}, nil
+        return ParsedMemoryReference{LabelReference: value, Constant: -1}, nil
     }
 
     return ParsedMemoryReference{}, fmt.Errorf("unimplemented memory reference on line %v '%v'", code.SourceLine, code.Text)
@@ -735,10 +788,7 @@ func parseLabel(raw RawCode) (string, error) {
 }
 
 func parse(raw RawProgram) (ParsedProgram, error) {
-    variableAllocator := VariableAllocator{
-        CurrentSlot: 16,
-        Mapping: make(map[string]int32),
-    }
+    
 
     labelManager := LabelManager {
         Labels: make(map[string]int32),
@@ -766,7 +816,7 @@ func parse(raw RawProgram) (ParsedProgram, error) {
             }
             parsed.Add(&converted)
         } else if strings.HasPrefix(code.Text, "@") {
-            converted, err := parseMemoryReference(code, &variableAllocator)
+            converted, err := parseMemoryReference(code)
             if err != nil {
                 return parsed, err
             }
