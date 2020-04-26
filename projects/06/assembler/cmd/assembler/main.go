@@ -6,6 +6,7 @@ import (
     "flag"
     "bufio"
     "strings"
+    "strconv"
 )
 
 type RawCode struct {
@@ -46,6 +47,7 @@ func (raw *RawProgram) Dump() {
 }
 
 type ParsedCode interface {
+    ToBinaryString() string
 }
 
 type Register int
@@ -68,6 +70,8 @@ const (
 )
 
 type ParsedExpression interface {
+    UsesARegister() bool
+    ToComputeBinaryString() string
 }
 
 type ParsedAssignment struct {
@@ -77,8 +81,64 @@ type ParsedAssignment struct {
     Expression ParsedExpression
 }
 
+func (assignment *ParsedAssignment) ToBinaryString() string {
+    var out strings.Builder
+    out.WriteString("111")
+
+    usesA := assignment.Expression.UsesARegister()
+
+    if usesA {
+        out.WriteRune('0')
+    } else {
+        out.WriteRune('1')
+    }
+
+    out.WriteString(assignment.Expression.ToComputeBinaryString())
+
+    assignD := false
+    assignM := false
+    assignA := false
+
+    for _, register := range assignment.Assign {
+        switch register {
+            case DRegister: assignD = true
+            case ARegister: assignA = true
+            case MRegister: assignM = true
+        }
+    }
+
+    if assignA {
+        out.WriteRune('1')
+    } else {
+        out.WriteRune('0')
+    }
+
+    if assignD {
+        out.WriteRune('1')
+    } else {
+        out.WriteRune('0')
+    }
+
+    if assignM {
+        out.WriteRune('1')
+    } else {
+        out.WriteRune('0')
+    }
+
+    /* no jump for an assignment */
+    out.WriteString("000")
+
+    return out.String()
+}
+
 type ParsedProgram struct {
     Code []ParsedCode
+}
+
+func (program *ParsedProgram) DumpAsBinaryString() {
+    for _, code := range program.Code {
+        fmt.Printf("%v\n", code.ToBinaryString())
+    }
 }
 
 func (program *ParsedProgram) Add(code ParsedCode) {
@@ -123,10 +183,29 @@ type ParsedSingleRegister struct {
     Register Register
 }
 
+func (register *ParsedSingleRegister) ToComputeBinaryString() string {
+    switch register.Register {
+        case ARegister, MRegister:
+            return "110000"
+        case DRegister:
+            return "001100"
+        default:
+            return "invalid"
+    }
+}
+
+func (register *ParsedSingleRegister) UsesARegister() bool {
+    return register.Register == ARegister
+}
+
 type ParsedUnary struct {
     ParsedExpression
     Operation Operation
     Value ParsedExpression
+}
+
+func (unary *ParsedUnary) UsesARegister() bool {
+    return unary.Value.UsesARegister()
 }
 
 type ParsedBinary struct {
@@ -134,6 +213,74 @@ type ParsedBinary struct {
     Operation Operation
     Left ParsedExpression
     Right ParsedExpression
+}
+
+func isConstant(expression ParsedExpression) bool {
+    _, ok := expression.(*ParsedConstant)
+    return ok
+}
+
+func (binary *ParsedBinary) ToComputeBinaryString() string {
+    switch binary.Operation {
+        case OperationAdd:
+            /* d+1, a+1, d+a */
+
+            left, ok := binary.Left.(*ParsedSingleRegister)
+            if !ok {
+                return "invalid binary"
+            }
+
+            if isConstant(binary.Right) {
+                right, ok := binary.Right.(*ParsedConstant)
+                if !ok {
+                    return "invalid binary"
+                }
+
+                if right.Value != 1 {
+                    return "invalid binary"
+                }
+
+                switch left.Register {
+                    /* d+1 */
+                    case DRegister:
+                        return "011111"
+
+                    /* a+1 */
+                    case ARegister, MRegister:
+                        return "110111"
+                    default: return "invalid binary"
+                }
+
+            } else {
+                right, ok := binary.Right.(*ParsedSingleRegister)
+                if !ok {
+                    return "invalid binary"
+                }
+
+                if right.Register == DRegister {
+                    return "invalid binary"
+                }
+
+                return "000010"
+            }
+
+        case OperationSubtract:
+            /* d-1, a-1, d-a, a-d */
+
+            return "unimplemented subtract"
+        case OperationBinaryAnd:
+            /* d&a */
+            return "unimplemented and"
+        case OperationBinaryOr:
+            /* d|a */
+            return "unimplemented or"
+        default:
+            return "invalid operation"
+    }
+}
+
+func (binary *ParsedBinary) UsesARegister() bool {
+    return binary.Left.UsesARegister() || binary.Right.UsesARegister()
 }
 
 func parseNegation(expression string) (ParsedExpression, error) {
@@ -150,7 +297,7 @@ func parseNegation(expression string) (ParsedExpression, error) {
         return nil, err
     }
 
-    return ParsedUnary{Operation: OperationNegate, Value: register}, nil
+    return &ParsedUnary{Operation: OperationNegate, Value: &ParsedSingleRegister{Register: register}}, nil
 }
 
 func parseNot(expression string) (ParsedExpression, error) {
@@ -164,12 +311,12 @@ func parseNot(expression string) (ParsedExpression, error) {
         return nil, err
     }
 
-    return ParsedUnary{Operation: OperationNot, Value: register}, nil
+    return &ParsedUnary{Operation: OperationNot, Value: &ParsedSingleRegister{Register: register}}, nil
 }
 
 func maybeParseOperation(register Register, expression string) (ParsedExpression, error) {
     if len(expression) == 0 {
-        return ParsedSingleRegister{Register: register}, nil
+        return &ParsedSingleRegister{Register: register}, nil
     }
 
     if len(expression) != 2 {
@@ -196,17 +343,22 @@ func maybeParseOperation(register Register, expression string) (ParsedExpression
         case '1': rightValue = ParsedConstant{Value: 1}
         default:
             var err error
-            rightValue, err = parseRegister(rune(right))
+            register, err = parseRegister(rune(right))
             if err != nil {
                 return nil, err
             }
+            rightValue = &ParsedSingleRegister{Register: register}
     }
 
     if rightValue == nil {
         return nil, fmt.Errorf("expected a value to follow the operation")
     }
 
-    return ParsedBinary{Operation: operation, Left: register, Right: rightValue}, nil
+    return &ParsedBinary{
+        Operation: operation,
+        Left: &ParsedSingleRegister{Register: register},
+        Right: rightValue},
+        nil
 }
 
 func parseExpression(expression string) (ParsedExpression, error) {
@@ -258,16 +410,105 @@ func parseAssignment(raw RawCode) (ParsedAssignment, error) {
     }, nil
 }
 
+type ParsedJump struct {
+    ParsedExpression
+}
+
+func (jump *ParsedJump) ToBinaryString() string {
+    return "jump unimplemented"
+}
+
+func parseJump(code RawCode) (ParsedJump, error) {
+    /* jump := value ; jump_op
+     * jump_op := null | JGT | JEQ | JLT | JNE | JLE JMP
+     */
+    return ParsedJump{}, fmt.Errorf("unimplemented")
+}
+
+type ParsedMemoryReference struct {
+    ParsedCode
+    Constant int32
+}
+
+func (memory *ParsedMemoryReference) ToBinaryString() string {
+    binary := strconv.FormatInt(int64(memory.Constant), 2)
+    zeroPad := 16 - len(binary)
+    if zeroPad < 1 {
+        return fmt.Sprintf("invalid memory size %v", memory.Constant)
+    }
+
+    var builder strings.Builder
+    for i := 0; i < zeroPad; i++ {
+        builder.WriteRune('0')
+    }
+    builder.WriteString(binary)
+    return builder.String()
+}
+
+func isNumber(value string) bool {
+    _, err := strconv.Atoi(value)
+    return err == nil
+}
+
+func parseMemoryConstant(value string) (int32, error) {
+    out, err := strconv.Atoi(value)
+    return int32(out), err
+}
+
+func parseMemoryReference(code RawCode) (ParsedMemoryReference, error) {
+    line := code.Text
+
+    if len(line) == 0 {
+        return ParsedMemoryReference{}, fmt.Errorf("not a memory reference")
+    }
+
+    if line[0] != '@' {
+        return ParsedMemoryReference{}, fmt.Errorf("not a memory reference")
+    }
+
+    value := line[1:]
+    if isNumber(value) {
+        parsed, err := parseMemoryConstant(value)
+        if err != nil {
+            return ParsedMemoryReference{}, err
+        }
+        return ParsedMemoryReference{Constant: parsed}, nil
+    }
+
+    return ParsedMemoryReference{}, fmt.Errorf("unimplemented memory reference on line %v", code.SourceLine)
+}
+
 func parse(raw RawProgram) (ParsedProgram, error) {
+    // variableAllocator := 16
     var parsed ParsedProgram
 
     for _, code := range raw.Code {
+        /* line := assignment | label declaration | jump | variable/explicit A value
+         * assignment := X=Y
+         * label declaration := (FOO)
+         * jump :=
+         * variable/explicit A value := @2 | @foo
+         */
         if strings.ContainsRune(code.Text, '=') {
             converted, err := parseAssignment(code)
             if err != nil {
                 return parsed, err
             }
             parsed.Add(&converted)
+        } else if strings.ContainsRune(code.Text, ';') {
+            converted, err := parseJump(code)
+            if err != nil {
+                return parsed, err
+            }
+            parsed.Add(&converted)
+        } else if strings.HasPrefix(code.Text, "@") {
+            converted, err := parseMemoryReference(code)
+            if err != nil {
+                return parsed, err
+            }
+            parsed.Add(&converted)
+        } else {
+            return parsed, fmt.Errorf("Error line %v: unknown line '%v'", code.SourceLine, code.Text)
         }
     }
 
@@ -307,7 +548,7 @@ func process(path string) error {
         return err
     }
 
-    _ = parsed
+    parsed.DumpAsBinaryString()
 
     return nil
 }
