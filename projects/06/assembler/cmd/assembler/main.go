@@ -734,28 +734,22 @@ func parseMemoryReference(code RawCode) (ParsedMemoryReference, error) {
      * SCREEN, KBD, etc
      */
 
-    if isAllCaps(value) {
-        if isSpecialMemory(value) {
-            switch value {
-                case "SP": return ParsedMemoryReference{Constant: 0}, nil
-                case "LCL": return ParsedMemoryReference{Constant: 1}, nil
-                case "ARG": return ParsedMemoryReference{Constant: 2}, nil
-                case "THIS": return ParsedMemoryReference{Constant: 3}, nil
-                case "THAT": return ParsedMemoryReference{Constant: 4}, nil
-                case "SCREEN": return ParsedMemoryReference{Constant: 0x4000}, nil
-                case "KBD": return ParsedMemoryReference{Constant: 0x6000}, nil
-            }
-
-            return ParsedMemoryReference{}, fmt.Errorf("unimplemented special memory reference on line %v '%v'", code.SourceLine, code.Text)
+    if isSpecialMemory(value) {
+        switch value {
+            case "SP": return ParsedMemoryReference{Constant: 0}, nil
+            case "LCL": return ParsedMemoryReference{Constant: 1}, nil
+            case "ARG": return ParsedMemoryReference{Constant: 2}, nil
+            case "THIS": return ParsedMemoryReference{Constant: 3}, nil
+            case "THAT": return ParsedMemoryReference{Constant: 4}, nil
+            case "SCREEN": return ParsedMemoryReference{Constant: 0x4000}, nil
+            case "KBD": return ParsedMemoryReference{Constant: 0x6000}, nil
         }
 
-        return ParsedMemoryReference{LabelReference: value, Constant: -1}, nil
-
-    } else {
-        return ParsedMemoryReference{LabelReference: value, Constant: -1}, nil
+        return ParsedMemoryReference{}, fmt.Errorf("unimplemented special memory reference on line %v '%v'", code.SourceLine, code.Text)
     }
 
-    return ParsedMemoryReference{}, fmt.Errorf("unimplemented memory reference on line %v '%v'", code.SourceLine, code.Text)
+    /* otherwise its a label or variable */
+    return ParsedMemoryReference{LabelReference: value, Constant: -1}, nil
 }
 
 type LabelManager struct {
