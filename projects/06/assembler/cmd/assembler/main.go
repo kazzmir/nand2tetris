@@ -742,6 +742,8 @@ func parseMemoryReference(code RawCode) (ParsedMemoryReference, error) {
                 case "ARG": return ParsedMemoryReference{Constant: 2}, nil
                 case "THIS": return ParsedMemoryReference{Constant: 3}, nil
                 case "THAT": return ParsedMemoryReference{Constant: 4}, nil
+                case "SCREEN": return ParsedMemoryReference{Constant: 0x4000}, nil
+                case "KBD": return ParsedMemoryReference{Constant: 0x6000}, nil
             }
 
             return ParsedMemoryReference{}, fmt.Errorf("unimplemented special memory reference on line %v '%v'", code.SourceLine, code.Text)
