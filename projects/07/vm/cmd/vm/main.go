@@ -38,6 +38,29 @@ func (constant *PushConstant) TranslateToAssembly() []string {
     }
 }
 
+type Add struct {
+    VMCommand
+}
+
+func (add *Add) TranslateToAssembly() []string {
+    /* a = pop sp
+     * b = pop sp
+     * out = a + b
+     * push out
+     */
+
+    /* FIXME: this needs to decrement sp first, then assign
+     */
+    return []string{
+        "@SP",   // sp=sp-1
+        "AM=M-1",
+        "D=M",   // d=ram[sp]
+        "@SP",
+        "AM=M-1", // sp=sp-1
+        "M=D+M", // ram[sp]=d+ram[sp]
+    }
+}
+
 func parseLine(line string) (VMCommand, error) {
     parts := strings.Split(line, " ")
     var useParts []string
@@ -73,7 +96,7 @@ func parseLine(line string) (VMCommand, error) {
                 return nil, fmt.Errorf("push command needs two arguments")
             }
         case "add":
-            return nil, fmt.Errorf("add not implemented")
+            return &Add{}, nil
     }
 
     return nil, fmt.Errorf("unknown command %v", useParts[0])
