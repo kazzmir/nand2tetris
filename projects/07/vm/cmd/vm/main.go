@@ -58,6 +58,8 @@ func (add *Add) TranslateToAssembly() []string {
         "@SP",
         "AM=M-1", // sp=sp-1
         "M=D+M", // ram[sp]=d+ram[sp]
+        "@SP",
+        "M=M+1",
     }
 }
 
