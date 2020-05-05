@@ -102,25 +102,36 @@ func parseLine(line string) (VMCommand, error) {
     return nil, fmt.Errorf("unknown command %v", useParts[0])
 }
 
-func processVMLine(line string) error {
+func processVMLine(line string) (VMCommand, error) {
     processed := normalizeWhitespace(line)
     if len(processed) == 0 {
-        return nil
+        return nil, nil
     }
 
     // fmt.Printf("Processing line '%v'\n", processed)
 
     command, err := parseLine(processed)
     if err != nil {
-        return err
+        return nil, err
     }
 
+    /*
     assembly := command.TranslateToAssembly()
     for _, assemblyLine := range assembly {
         fmt.Printf("%v\n", assemblyLine)
     }
+    */
 
-    return nil
+    return command, nil
+}
+
+func replaceExtension(path string, what string) string {
+    parts := strings.Split(path, ".")
+    if len(parts) == 2 {
+        return fmt.Sprintf("%s.%s", parts[0], what)
+    }
+
+    return path
 }
 
 func translate(path string) error {
@@ -135,6 +146,12 @@ func translate(path string) error {
     }
     defer file.Close()
 
+    output, err := os.Create(replaceExtension(path, "asm"))
+    if err != nil {
+        return err
+    }
+    defer output.Close()
+
     scanner := bufio.NewScanner(file)
     var sourceLine uint64
     for scanner.Scan() {
@@ -142,9 +159,19 @@ func translate(path string) error {
         // fmt.Printf("%v: %v\n", i, line)
         sourceLine += 1
 
-        err = processVMLine(line)
+        command, err := processVMLine(line)
         if err != nil {
             return fmt.Errorf("Could not process line %v '%v': %v\n", sourceLine, line, err)
+        }
+
+        if command == nil {
+            continue
+        }
+
+        output.WriteString(fmt.Sprintf("// %s\n", line))
+        for _, asmLine := range command.TranslateToAssembly() {
+            output.WriteString(asmLine)
+            output.Write([]byte{'\n'})
         }
     }
 
