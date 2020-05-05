@@ -17,8 +17,18 @@ func normalizeWhitespace(line string) string {
     return strings.TrimSpace(line)
 }
 
+type Translator struct {
+    gensym uint64
+}
+
+func (translator *Translator) Gensym(name string) string {
+    use := translator.gensym
+    translator.gensym += 1
+    return fmt.Sprintf("%v_%v", name, use)
+}
+
 type VMCommand interface {
-    TranslateToAssembly() []string
+    TranslateToAssembly(*Translator) []string
 }
 
 type PushConstant struct {
@@ -26,7 +36,7 @@ type PushConstant struct {
     Constant uint64
 }
 
-func (constant *PushConstant) TranslateToAssembly() []string {
+func (constant *PushConstant) TranslateToAssembly(translator *Translator) []string {
     return []string{
         fmt.Sprintf("@%v", constant.Constant), // a = constant
         "D=A", // d = a
@@ -42,15 +52,13 @@ type Add struct {
     VMCommand
 }
 
-func (add *Add) TranslateToAssembly() []string {
+func (add *Add) TranslateToAssembly(translator *Translator) []string {
     /* a = pop sp
      * b = pop sp
      * out = a + b
      * push out
      */
 
-    /* FIXME: this needs to decrement sp first, then assign
-     */
     return []string{
         "@SP",   // sp=sp-1
         "AM=M-1",
@@ -58,6 +66,42 @@ func (add *Add) TranslateToAssembly() []string {
         "@SP",
         "AM=M-1", // sp=sp-1
         "M=D+M", // ram[sp]=d+ram[sp]
+        "@SP",
+        "M=M+1",
+    }
+}
+
+type Eq struct {
+    VMCommand
+}
+
+func (eq *Eq) TranslateToAssembly(translator *Translator) []string {
+    /* a = pop sp
+     * b = pop sp
+     * out = a == b
+     * push out
+     */
+    notEqualLabel := translator.Gensym("eq")
+    eqDone := translator.Gensym("eq")
+    return []string{
+        "@SP",
+        "AM=M-1",
+        "D=M",
+        "@SP",
+        "AM=M-1",
+        "D=D-M",
+        fmt.Sprintf("@%v", notEqualLabel),
+        "D; JNE",
+        "@SP",
+        "A=M",
+        "M=-1",
+        fmt.Sprintf("@%v", eqDone),
+        "0; JMP",
+        fmt.Sprintf("(%v)", notEqualLabel),
+        "@SP",
+        "A=M",
+        "M=0",
+        fmt.Sprintf("(%v)", eqDone),
         "@SP",
         "M=M+1",
     }
@@ -97,6 +141,8 @@ func parseLine(line string) (VMCommand, error) {
             } else {
                 return nil, fmt.Errorf("push command needs two arguments")
             }
+        case "eq":
+            return &Eq{}, nil
         case "add":
             return &Add{}, nil
     }
@@ -142,6 +188,10 @@ func translate(path string) error {
      * output the result to path.asm
      */
 
+    translator := Translator{
+        gensym: 0,
+    }
+
     file, err := os.Open(path)
     if err != nil {
         return err
@@ -171,7 +221,7 @@ func translate(path string) error {
         }
 
         output.WriteString(fmt.Sprintf("// %s\n", line))
-        for _, asmLine := range command.TranslateToAssembly() {
+        for _, asmLine := range command.TranslateToAssembly(&translator) {
             output.WriteString(asmLine)
             output.Write([]byte{'\n'})
         }
