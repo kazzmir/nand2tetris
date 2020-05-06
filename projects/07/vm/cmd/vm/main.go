@@ -71,6 +71,28 @@ func (add *Add) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type Sub struct {
+    VMCommand
+}
+
+func (sub *Sub) TranslateToAssembly(translator *Translator) []string {
+    /* sp -> y
+     *    -> x
+     * out = x-y
+     * push out
+     */
+    return []string {
+        "@SP",
+        "AM=M-1",
+        "D=M",    // y
+        "@SP",
+        "AM=M-1",
+        "M=M-D",
+        "@SP",
+        "M=M+1",
+    }
+}
+
 type Lt struct {
     VMCommand
 }
@@ -143,6 +165,68 @@ func (gt *Gt) TranslateToAssembly(translator *Translator) []string {
     return generateComparison(translator, "JLE")
 }
 
+type Neg struct {
+    VMCommand
+}
+
+func (neg *Neg) TranslateToAssembly(translator *Translator) []string {
+    return []string {
+        "@SP",
+        "AM=M-1",
+        "M=-M",
+        "@SP",
+        "M=M+1",
+    }
+}
+
+type Not struct {
+    VMCommand
+}
+
+func (not *Not) TranslateToAssembly(translator *Translator) []string {
+    return []string {
+        "@SP",
+        "AM=M-1",
+        "M=!M",
+        "@SP",
+        "M=M+1",
+    }
+}
+
+type And struct {
+    VMCommand
+}
+
+func (and *And) TranslateToAssembly(translator *Translator) []string {
+    return []string {
+        "@SP",
+        "AM=M-1",
+        "D=M",
+        "@SP",
+        "AM=M-1",
+        "M=D&M",
+        "@SP",
+        "M=M+1",
+    }
+}
+
+type Or struct {
+    VMCommand
+}
+
+func (or *Or) TranslateToAssembly(translator *Translator) []string {
+    return []string {
+        "@SP",
+        "AM=M-1",
+        "D=M",
+        "@SP",
+        "AM=M-1",
+        "M=D|M",
+        "@SP",
+        "M=M+1",
+    }
+}
+
 func parseLine(line string) (VMCommand, error) {
     parts := strings.Split(line, " ")
     var useParts []string
@@ -185,6 +269,16 @@ func parseLine(line string) (VMCommand, error) {
             return &Eq{}, nil
         case "add":
             return &Add{}, nil
+        case "sub":
+            return &Sub{}, nil
+        case "neg":
+            return &Neg{}, nil
+        case "and":
+            return &And{}, nil
+        case "or":
+            return &Or{}, nil
+        case "not":
+            return &Not{}, nil
     }
 
     return nil, fmt.Errorf("unknown command %v", useParts[0])
