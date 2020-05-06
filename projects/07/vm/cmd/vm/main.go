@@ -71,6 +71,56 @@ func (add *Add) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type Lt struct {
+    VMCommand
+}
+
+func generateComparison(translator *Translator, jumpFalse string) []string {
+    /* a = pop sp
+     * b = pop sp
+     * out = b CMP a
+     * push out
+     */
+
+    falseBranch := translator.Gensym("cmp_false")
+    done := translator.Gensym("cmp_done")
+
+    return []string{
+        "@SP",
+        "AM=M-1",
+        "D=M",
+        "@SP",
+        "AM=M-1",
+        "D=M-D", // b-a
+        // d<0, then jump to m=-1 (true)
+        // d>=0, then jump to m=0 (false)
+        fmt.Sprintf("@%v", falseBranch),
+        fmt.Sprintf("D; %v", jumpFalse),
+        "@SP",
+        "A=M",
+        "M=-1",
+        fmt.Sprintf("@%v", done),
+        "0; JMP",
+        fmt.Sprintf("(%v)", falseBranch),
+        "@SP",
+        "A=M",
+        "M=0",
+        fmt.Sprintf("(%v)", done),
+        "@SP",
+        "M=M+1",
+    }
+
+}
+
+func (lt *Lt) TranslateToAssembly(translator *Translator) []string {
+    /* sp -> b
+     *    -> a
+     * a-b is true if a<b and false if a>=b
+     *
+     */
+    return generateComparison(translator, "JGE")
+}
+
 type Eq struct {
     VMCommand
 }
@@ -81,30 +131,16 @@ func (eq *Eq) TranslateToAssembly(translator *Translator) []string {
      * out = a == b
      * push out
      */
-    notEqualLabel := translator.Gensym("eq")
-    eqDone := translator.Gensym("eq")
-    return []string{
-        "@SP",
-        "AM=M-1",
-        "D=M",
-        "@SP",
-        "AM=M-1",
-        "D=D-M",
-        fmt.Sprintf("@%v", notEqualLabel),
-        "D; JNE",
-        "@SP",
-        "A=M",
-        "M=-1",
-        fmt.Sprintf("@%v", eqDone),
-        "0; JMP",
-        fmt.Sprintf("(%v)", notEqualLabel),
-        "@SP",
-        "A=M",
-        "M=0",
-        fmt.Sprintf("(%v)", eqDone),
-        "@SP",
-        "M=M+1",
-    }
+
+    return generateComparison(translator, "JNE")
+}
+
+type Gt struct {
+    VMCommand
+}
+
+func (gt *Gt) TranslateToAssembly(translator *Translator) []string {
+    return generateComparison(translator, "JLE")
 }
 
 func parseLine(line string) (VMCommand, error) {
@@ -141,6 +177,10 @@ func parseLine(line string) (VMCommand, error) {
             } else {
                 return nil, fmt.Errorf("push command needs two arguments")
             }
+        case "lt":
+            return &Lt{}, nil
+        case "gt":
+            return &Gt{}, nil
         case "eq":
             return &Eq{}, nil
         case "add":
@@ -213,7 +253,7 @@ func translate(path string) error {
 
         command, err := processVMLine(line)
         if err != nil {
-            return fmt.Errorf("Could not process line %v '%v': %v\n", sourceLine, line, err)
+            return fmt.Errorf("Could not process line %v '%v': %v", sourceLine, line, err)
         }
 
         if command == nil {
