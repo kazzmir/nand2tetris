@@ -134,6 +134,9 @@ func generateComparison(translator *Translator, jumpFalse string) []string {
 
 }
 
+/* the temp segment starts at ram 5 */
+const TempStart = 5
+
 func (lt *Lt) TranslateToAssembly(translator *Translator) []string {
     /* sp -> b
      *    -> a
@@ -263,6 +266,23 @@ func popToSegment(segment string, index int) []string {
     }
 }
 
+func pushToSegment(segment string, index int) []string {
+    return []string {
+        fmt.Sprintf("@%v", segment),
+        "D=M",
+        fmt.Sprintf("@%v", index),
+        "D=D+A", // d = segment+index
+        "A=D",
+        "D=M",  // d = ram[segment+index]
+
+        "@SP",
+        "A=M",
+        "M=D", // ram[sp] = d
+        "@SP",
+        "M=M+1", // sp++
+    }
+}
+
 func (local *PopLocal) TranslateToAssembly(translator *Translator) []string {
     return popToSegment("LCL", local.Index)
 }
@@ -300,7 +320,68 @@ type PopTemp struct {
 }
 
 func (temp *PopTemp) TranslateToAssembly(translator *Translator) []string {
-    return popToSegment("TEMP", temp.Index)
+    index := TempStart + temp.Index
+    return []string{
+        "@SP",
+        "AM=M-1",
+        "D=M",
+        fmt.Sprintf("@%v", index),
+        "M=D",
+    }
+}
+
+type PushLocal struct {
+    VMCommand
+    Index int
+}
+
+func (local *PushLocal) TranslateToAssembly(translator *Translator) []string {
+    return pushToSegment("LCL", local.Index)
+}
+
+type PushTemp struct {
+    VMCommand
+    Index int
+}
+
+func (temp *PushTemp) TranslateToAssembly(translator *Translator) []string {
+    index := TempStart + temp.Index
+    return []string{
+        fmt.Sprintf("@%v", index),
+        "D=M",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+    }
+}
+
+type PushThis struct {
+    VMCommand
+    Index int
+}
+
+func (this *PushThis) TranslateToAssembly(translator *Translator) []string {
+    return pushToSegment("THIS", this.Index)
+}
+
+type PushThat struct {
+    VMCommand
+    Index int
+}
+
+func (that *PushThat) TranslateToAssembly(translator *Translator) []string {
+    return pushToSegment("THAT", that.Index)
+}
+
+type PushArgument struct {
+    VMCommand
+    Index int
+}
+
+func (argument *PushArgument) TranslateToAssembly(translator *Translator) []string {
+    return pushToSegment("ARG", argument.Index)
 }
 
 func getPushPopParts(parts []string) (string, int, error) {
@@ -334,25 +415,21 @@ func parseLine(line string) (VMCommand, error) {
 
     switch strings.ToLower(useParts[0]) {
         case "push":
-            if len(useParts) > 1 {
-                switch strings.ToLower(useParts[1]) {
-                    case "constant":
-                        if len(useParts) > 2 {
-                            value, err := strconv.ParseInt(useParts[2], 10, 64)
-                            if err != nil {
-                                return nil, fmt.Errorf("push constant value must be an integer: %v", err)
-                            }
-
-                            return &PushConstant{
-                                Constant: uint64(value),
-                            }, nil
-                        } else {
-                            return nil, fmt.Errorf("push constant needs a value")
-                        }
-                }
-            } else {
-                return nil, fmt.Errorf("push command needs two arguments")
+            where, index, err := getPushPopParts(useParts)
+            if err != nil {
+                return nil, err
             }
+
+            switch where {
+                case "constant": return &PushConstant{Constant: uint64(index)}, nil
+                case "local": return &PushLocal{Index: index}, nil
+                case "that": return &PushThat{Index: index}, nil
+                case "this": return &PushThis{Index: index}, nil
+                case "argument": return &PushArgument{Index: index}, nil
+                case "temp": return &PushTemp{Index: index}, nil
+            }
+
+            return nil, fmt.Errorf("Unknown push command '%v'", where)
         case "pop":
             where, index, err := getPushPopParts(useParts)
             if err != nil {
