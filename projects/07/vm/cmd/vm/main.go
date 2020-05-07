@@ -227,6 +227,98 @@ func (or *Or) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type PopLocal struct {
+    VMCommand
+    Index int
+}
+
+func popToSegment(segment string, index int) []string {
+    /* ram[local+index] = sp--
+     *
+     * store ram[sp-1] in r13
+     * compute local+index, store in r14
+     * store r14 into ram[r13]
+     */
+    return []string{
+        "@SP",
+        "AM=M-1",
+        "D=M", // d = ram[sp]
+
+        "@R13",
+        "M=D", // ram[r13] = d
+
+        fmt.Sprintf("@%v", index),
+        "D=A",
+        fmt.Sprintf("@%v", segment),
+        "D=D+M", // ram[local+index]
+        "@R14",
+        "M=D",  // ram[r14] = local+index
+
+        "@R13", // a = r13
+        "D=M",
+
+        "@R14",
+        "A=M",
+        "M=D",
+    }
+}
+
+func (local *PopLocal) TranslateToAssembly(translator *Translator) []string {
+    return popToSegment("LCL", local.Index)
+}
+
+type PopArgument struct {
+    VMCommand
+    Index int
+}
+
+func (argument *PopArgument) TranslateToAssembly(translator *Translator) []string {
+    return popToSegment("ARG", argument.Index)
+}
+
+type PopThis struct {
+    VMCommand
+    Index int
+}
+
+func (this *PopThis) TranslateToAssembly(translator *Translator) []string {
+    return popToSegment("THIS", this.Index)
+}
+
+type PopThat struct {
+    VMCommand
+    Index int
+}
+
+func (that *PopThat) TranslateToAssembly(translator *Translator) []string {
+    return popToSegment("THAT", that.Index)
+}
+
+type PopTemp struct {
+    VMCommand
+    Index int
+}
+
+func (temp *PopTemp) TranslateToAssembly(translator *Translator) []string {
+    return popToSegment("TEMP", temp.Index)
+}
+
+func getPushPopParts(parts []string) (string, int, error) {
+    if len(parts) == 3 {
+        where := parts[1]
+        number := parts[2]
+
+        value, err := strconv.ParseInt(number, 10, 64)
+        if err != nil {
+            return "", 0, fmt.Errorf("push/pop value must be an integer: %v", err)
+        }
+
+        return where, int(value), nil
+    } else {
+        return "", 0, fmt.Errorf("push/pop needs 3 parts, but only given %v: %v", len(parts), parts)
+    }
+}
+
 func parseLine(line string) (VMCommand, error) {
     parts := strings.Split(line, " ")
     var useParts []string
@@ -261,6 +353,19 @@ func parseLine(line string) (VMCommand, error) {
             } else {
                 return nil, fmt.Errorf("push command needs two arguments")
             }
+        case "pop":
+            where, index, err := getPushPopParts(useParts)
+            if err != nil {
+                return nil, err
+            }
+            switch where {
+                case "local": return &PopLocal{Index: index}, nil
+                case "argument": return &PopArgument{Index: index}, nil
+                case "this": return &PopThis{Index: index}, nil
+                case "that": return &PopThat{Index: index}, nil
+                case "temp": return &PopTemp{Index: index}, nil
+            }
+            return nil, fmt.Errorf("Unknown memory area '%v'", where)
         case "lt":
             return &Lt{}, nil
         case "gt":
