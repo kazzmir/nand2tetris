@@ -136,6 +136,8 @@ func generateComparison(translator *Translator, jumpFalse string) []string {
 
 /* the temp segment starts at ram 5 */
 const TempStart = 5
+/* the pointer segment starts at ram 3 */
+const PointerStart = 3
 
 func (lt *Lt) TranslateToAssembly(translator *Translator) []string {
     /* sp -> b
@@ -330,6 +332,22 @@ func (temp *PopTemp) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type PopPointer struct {
+    VMCommand
+    Index int
+}
+
+func (pointer *PopPointer) TranslateToAssembly(translator *Translator) []string {
+    index := PointerStart + pointer.Index
+    return []string{
+        "@SP",
+        "AM=M-1",
+        "D=M",
+        fmt.Sprintf("@%v", index),
+        "M=D",
+    }
+}
+
 type PushLocal struct {
     VMCommand
     Index int
@@ -384,6 +402,24 @@ func (argument *PushArgument) TranslateToAssembly(translator *Translator) []stri
     return pushToSegment("ARG", argument.Index)
 }
 
+type PushPointer struct {
+    VMCommand
+    Index int
+}
+
+func (pointer *PushPointer) TranslateToAssembly(translator *Translator) []string {
+    index := PointerStart + pointer.Index
+    return []string{
+        fmt.Sprintf("@%v", index),
+        "D=M",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+    }
+}
+
 func getPushPopParts(parts []string) (string, int, error) {
     if len(parts) == 3 {
         where := parts[1]
@@ -427,6 +463,7 @@ func parseLine(line string) (VMCommand, error) {
                 case "this": return &PushThis{Index: index}, nil
                 case "argument": return &PushArgument{Index: index}, nil
                 case "temp": return &PushTemp{Index: index}, nil
+                case "pointer": return &PushPointer{Index: index}, nil
             }
 
             return nil, fmt.Errorf("Unknown push command '%v'", where)
@@ -441,6 +478,7 @@ func parseLine(line string) (VMCommand, error) {
                 case "this": return &PopThis{Index: index}, nil
                 case "that": return &PopThat{Index: index}, nil
                 case "temp": return &PopTemp{Index: index}, nil
+                case "pointer": return &PopPointer{Index: index}, nil
             }
             return nil, fmt.Errorf("Unknown memory area '%v'", where)
         case "lt":
