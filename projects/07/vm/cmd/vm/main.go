@@ -420,6 +420,38 @@ func (pointer *PushPointer) TranslateToAssembly(translator *Translator) []string
     }
 }
 
+type PushStatic struct {
+    VMCommand
+    Index int
+}
+
+func (static *PushStatic) TranslateToAssembly(translator *Translator) []string {
+    return []string{
+        fmt.Sprintf("@static.%v", static.Index),
+        "D=M",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+    }
+}
+
+type PopStatic struct {
+    VMCommand
+    Index int
+}
+
+func (static *PopStatic) TranslateToAssembly(translator *Translator) []string {
+    return []string{
+        "@SP",
+        "AM=M-1",
+        "D=M",
+        fmt.Sprintf("@static.%v", static.Index),
+        "M=D",
+    }
+}
+
 func getPushPopParts(parts []string) (string, int, error) {
     if len(parts) == 3 {
         where := parts[1]
@@ -464,6 +496,7 @@ func parseLine(line string) (VMCommand, error) {
                 case "argument": return &PushArgument{Index: index}, nil
                 case "temp": return &PushTemp{Index: index}, nil
                 case "pointer": return &PushPointer{Index: index}, nil
+                case "static": return &PushStatic{Index: index}, nil
             }
 
             return nil, fmt.Errorf("Unknown push command '%v'", where)
@@ -479,6 +512,7 @@ func parseLine(line string) (VMCommand, error) {
                 case "that": return &PopThat{Index: index}, nil
                 case "temp": return &PopTemp{Index: index}, nil
                 case "pointer": return &PopPointer{Index: index}, nil
+                case "static": return &PopStatic{Index: index}, nil
             }
             return nil, fmt.Errorf("Unknown memory area '%v'", where)
         case "lt":
