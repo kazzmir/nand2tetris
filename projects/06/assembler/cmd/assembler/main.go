@@ -605,8 +605,8 @@ func parseJump(code RawCode) (ParsedJump, error) {
     if len(parts) != 2 {
         return ParsedJump{}, fmt.Errorf("expected a jump to be separated by a ;")
     }
-    expression := parts[0]
-    jump := parts[1]
+    expression := strings.TrimSpace(parts[0])
+    jump := strings.TrimSpace(parts[1])
 
     parsedExpression, err := parseExpression(expression)
     if err != nil {

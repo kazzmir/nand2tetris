@@ -452,6 +452,17 @@ func (static *PopStatic) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type Label struct {
+    VMCommand
+    Name string
+}
+
+func (label *Label) TranslateToAssembly(translator *Translator) []string {
+    return []string {
+        fmt.Sprintf("(%v)", label.Name),
+    }
+}
+
 func getPushPopParts(parts []string) (string, int, error) {
     if len(parts) == 3 {
         where := parts[1]
@@ -465,6 +476,23 @@ func getPushPopParts(parts []string) (string, int, error) {
         return where, int(value), nil
     } else {
         return "", 0, fmt.Errorf("push/pop needs 3 parts, but only given %v: %v", len(parts), parts)
+    }
+}
+
+type IfGoto struct {
+    VMCommand
+    Name string
+}
+
+func (ifgoto *IfGoto) TranslateToAssembly(translator *Translator) []string {
+    /* if-goto X
+     * pop a; if a != 0: jump X
+     */
+    return []string {
+        "AM=M-1",
+        "D=M",
+        fmt.Sprintf("@%v", ifgoto.Name),
+        "D; JNE",
     }
 }
 
@@ -515,6 +543,18 @@ func parseLine(line string) (VMCommand, error) {
                 case "static": return &PopStatic{Index: index}, nil
             }
             return nil, fmt.Errorf("Unknown memory area '%v'", where)
+        case "label":
+                if len(useParts) == 2 {
+                    return &Label{Name: useParts[1]}, nil
+                } else {
+                    return nil, fmt.Errorf("Missing label name")
+                }
+        case "if-goto":
+            if len(useParts) == 2 {
+                return &IfGoto{Name: useParts[1]}, nil
+            } else {
+                return nil, fmt.Errorf("Missing label name")
+            }
         case "lt":
             return &Lt{}, nil
         case "gt":
