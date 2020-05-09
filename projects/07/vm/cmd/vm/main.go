@@ -496,6 +496,18 @@ func (ifgoto *IfGoto) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type Goto struct {
+    VMCommand
+    Name string
+}
+
+func (this *Goto) TranslateToAssembly(translator *Translator) []string {
+    return []string {
+        fmt.Sprintf("@%v", this.Name),
+        "0; JMP",
+    }
+}
+
 func parseLine(line string) (VMCommand, error) {
     parts := strings.Split(line, " ")
     var useParts []string
@@ -555,6 +567,12 @@ func parseLine(line string) (VMCommand, error) {
             } else {
                 return nil, fmt.Errorf("Missing label name")
             }
+        case "goto":
+            if len(useParts) == 2 {
+                return &Goto{Name: useParts[1]}, nil
+            } else {
+                return nil, fmt.Errorf("Missing label name")
+            }
         case "lt":
             return &Lt{}, nil
         case "gt":
@@ -575,7 +593,7 @@ func parseLine(line string) (VMCommand, error) {
             return &Not{}, nil
     }
 
-    return nil, fmt.Errorf("unknown command %v", useParts[0])
+    return nil, fmt.Errorf("unknown command '%v'", useParts[0])
 }
 
 func processVMLine(line string) (VMCommand, error) {
