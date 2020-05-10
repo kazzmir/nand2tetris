@@ -2,8 +2,10 @@ package main
 
 import (
     "os"
+    "io"
     "fmt"
     "bufio"
+    "path/filepath"
     "strings"
     "strconv"
 )
@@ -19,6 +21,7 @@ func normalizeWhitespace(line string) string {
 
 type Translator struct {
     gensym uint64
+    CurrentFunction string
 }
 
 func (translator *Translator) Gensym(name string) string {
@@ -515,7 +518,9 @@ type Function struct {
 }
 
 func (function *Function) TranslateToAssembly(translator *Translator) []string {
-    /* FIXME */
+    /* modifies the translator */
+    translator.CurrentFunction = function.Name
+
     out := []string {
         fmt.Sprintf("(%v)", function.Name),
     }
@@ -609,6 +614,85 @@ func (ret *Return) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type Call struct {
+    VMCommand
+    Name string
+    Arguments int
+}
+
+func (call *Call) TranslateToAssembly(translator *Translator) []string {
+    returnAddress := translator.Gensym(fmt.Sprintf("%v_return", translator.CurrentFunction))
+
+    return []string {
+        /* push return address */
+        fmt.Sprintf("@%v", returnAddress),
+        "D=A",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+
+        /* push lcl */
+        "@LCL",
+        "D=M",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+
+        /* push arg */
+        "@ARG",
+        "D=M",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+
+        /* push this */
+        "@THIS",
+        "D=M",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+
+        /* push that */
+        "@THAT",
+        "D=M",
+        "@SP",
+        "A=M",
+        "M=D",
+        "@SP",
+        "M=M+1",
+
+        /* arg = sp-n-5 */
+        "@SP",
+        "D=M",
+        fmt.Sprintf("@%v", call.Arguments),
+        "D=D-A",
+        "@5",
+        "D=D-A",
+        "@ARG",
+        "M=D",
+
+        /* lcl = sp */
+        "@SP",
+        "D=M",
+        "@LCL",
+        "M=D",
+
+        /* goto f */
+        fmt.Sprintf("@%v", call.Name),
+        "0; JMP",
+
+        fmt.Sprintf("(%v)", returnAddress),
+    }
+}
+
 func parseLine(line string) (VMCommand, error) {
     parts := strings.Split(line, " ")
     var useParts []string
@@ -672,6 +756,18 @@ func parseLine(line string) (VMCommand, error) {
             }
         case "return":
             return &Return{}, nil
+        case "call":
+            if len(useParts) == 3 {
+                name := useParts[1]
+                arguments, err := strconv.Atoi(useParts[2])
+                if err != nil {
+                    return nil, fmt.Errorf("Expected a number of arguments for call '%v': %v", useParts[2], err)
+                }
+
+                return &Call{Name: name, Arguments: arguments}, nil
+            } else {
+                return nil, fmt.Errorf("Call needs a function name and number of arguments")
+            }
         case "label":
                 if len(useParts) == 2 {
                     return &Label{Name: useParts[1]}, nil
@@ -742,30 +838,24 @@ func replaceExtension(path string, what string) string {
         return fmt.Sprintf("%s.%s", parts[0], what)
     }
 
-    return path
+    return fmt.Sprintf("%v.asm", path)
 }
 
-func translate(path string) error {
-    /* read each line of the file
-     * for each line, translate it into the appropriate hack assembly commands
-     * output the result to path.asm
-     */
-
-    translator := Translator{
-        gensym: 0,
+func bootstrapCode() []string {
+    return []string {
+        "call Sys.init 0",
     }
+}
 
+func translateVMFile(output io.Writer, path string, translator *Translator) error {
     file, err := os.Open(path)
     if err != nil {
         return err
     }
     defer file.Close()
 
-    output, err := os.Create(replaceExtension(path, "asm"))
-    if err != nil {
-        return err
-    }
-    defer output.Close()
+    io.WriteString(output, fmt.Sprintf("// %v", path))
+    output.Write([]byte{'\n'})
 
     scanner := bufio.NewScanner(file)
     var sourceLine uint64
@@ -783,9 +873,9 @@ func translate(path string) error {
             continue
         }
 
-        output.WriteString(fmt.Sprintf("// %s\n", line))
-        for _, asmLine := range command.TranslateToAssembly(&translator) {
-            output.WriteString(asmLine)
+        io.WriteString(output, fmt.Sprintf("// %s\n", line))
+        for _, asmLine := range command.TranslateToAssembly(translator) {
+            io.WriteString(output, asmLine)
             output.Write([]byte{'\n'})
         }
     }
@@ -798,9 +888,124 @@ func translate(path string) error {
     return nil
 }
 
+func writeBootstrapCode(output io.Writer, translator *Translator) error {
+    translator.CurrentFunction = "Sys.init"
+    /* initialize SP to 256 */
+    io.WriteString(output, "@256\n")
+    io.WriteString(output, "D=A\n")
+    io.WriteString(output, "@SP\n")
+    io.WriteString(output, "M=D\n")
+
+    /*
+    io.WriteString(output, "@Sys.init\n")
+    io.WriteString(output, "0; JMP\n")
+    */
+
+    for _, line := range bootstrapCode() {
+        command, err := processVMLine(line)
+        if err != nil {
+            return fmt.Errorf("Error in bootstrap code '%v': %v", line, err)
+        }
+
+        if command == nil {
+            return fmt.Errorf("Did not produce a command for bootstrap code line '%v'", line)
+        }
+
+        for _, asmLine := range command.TranslateToAssembly(translator) {
+            io.WriteString(output, asmLine)
+            output.Write([]byte{'\n'})
+        }
+    }
+
+    return nil
+}
+
+func isFile(path string) bool {
+    stat, err := os.Stat(path)
+    if err != nil {
+        return false
+    }
+
+    return !stat.IsDir()
+}
+
+func isDir(path string) bool {
+    stat, err := os.Stat(path)
+    if err != nil {
+        return false
+    }
+
+    return stat.IsDir()
+}
+
+func findVMFiles(root string) ([]string, error) {
+    var out []string
+
+    err := filepath.Walk(root, func (path string, info os.FileInfo, err error) error {
+        if strings.HasSuffix(path, ".vm") {
+            out = append(out, path)
+        }
+
+        return nil
+    })
+
+    return out, err
+}
+
+func translate(path string) error {
+    /* read each line of the file
+     * for each line, translate it into the appropriate hack assembly commands
+     * output the result to path.asm
+     */
+
+    translator := Translator{
+        gensym: 0,
+    }
+
+    var vmFiles []string
+
+    resolved, err := filepath.EvalSymlinks(path)
+    if err != nil {
+        return err
+    }
+
+    if isFile(resolved) {
+        vmFiles = []string{resolved}
+    } else if isDir(resolved) {
+        vmFiles, err = findVMFiles(resolved)
+        if err != nil {
+            return err
+        }
+    } else {
+        return fmt.Errorf("Not a file or directory?")
+    }
+
+    fmt.Printf("Translating files %v\n", vmFiles)
+
+    output, err := os.Create(replaceExtension(path, "asm"))
+    if err != nil {
+        return err
+    }
+    defer output.Close()
+
+    err = writeBootstrapCode(output, &translator)
+    if err != nil {
+        return err
+    }
+
+    for _, vmFile := range vmFiles {
+        err = translateVMFile(output, vmFile, &translator)
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
 func main(){
     if len(os.Args) < 2 {
-        fmt.Printf("Give a .vm file\n")
+        fmt.Printf("Give a .vm file or directory with .vm files in it\n")
         return
     }
 
