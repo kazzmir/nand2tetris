@@ -21,6 +21,7 @@ func normalizeWhitespace(line string) string {
 
 type Translator struct {
     gensym uint64
+    CurrentFile string
     CurrentFunction string
 }
 
@@ -430,7 +431,7 @@ type PushStatic struct {
 
 func (static *PushStatic) TranslateToAssembly(translator *Translator) []string {
     return []string{
-        fmt.Sprintf("@static.%v", static.Index),
+        fmt.Sprintf("@static.%v.%v", translator.CurrentFile, static.Index),
         "D=M",
         "@SP",
         "A=M",
@@ -450,7 +451,7 @@ func (static *PopStatic) TranslateToAssembly(translator *Translator) []string {
         "@SP",
         "AM=M-1",
         "D=M",
-        fmt.Sprintf("@static.%v", static.Index),
+        fmt.Sprintf("@static.%v.%v", translator.CurrentFile, static.Index),
         "M=D",
     }
 }
@@ -847,12 +848,26 @@ func bootstrapCode() []string {
     }
 }
 
+func removeExtension(path string) string {
+    dot := strings.Index(path, ".")
+    if dot != -1 {
+        return path[0:dot]
+    }
+    return path
+}
+
+func className(path string) string {
+    return removeExtension(filepath.Base(path))
+}
+
 func translateVMFile(output io.Writer, path string, translator *Translator) error {
     file, err := os.Open(path)
     if err != nil {
         return err
     }
     defer file.Close()
+
+    translator.CurrentFile = className(path)
 
     io.WriteString(output, fmt.Sprintf("// %v", path))
     output.Write([]byte{'\n'})
