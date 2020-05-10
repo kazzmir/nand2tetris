@@ -508,6 +508,107 @@ func (this *Goto) TranslateToAssembly(translator *Translator) []string {
     }
 }
 
+type Function struct {
+    VMCommand
+    Name string
+    Locals int
+}
+
+func (function *Function) TranslateToAssembly(translator *Translator) []string {
+    /* FIXME */
+    out := []string {
+        fmt.Sprintf("(%v)", function.Name),
+    }
+
+    for i := 0; i < function.Locals; i++ {
+
+        local := []string {
+            "@SP",
+            "A=M",
+            "M=0",
+            "@SP",
+            "M=M+1",
+        }
+
+        out = append(out, local...)
+    }
+
+    return out
+}
+
+type Return struct {
+    VMCommand
+}
+
+func (ret *Return) TranslateToAssembly(translator *Translator) []string {
+    return []string {
+        /* frame = lcl, ret = *(frame-5) */
+        "@LCL",
+        "D=M", // d = LCL
+        "@R13",
+        "M=D", // save LCL in r13
+        "@5",
+        "A=D-A", // 5 = (return address, that, this, arg, lcl)
+        "D=M", // d=*(lcl-5), which is the return address
+        "@R14",
+        "M=D", // r14 = return address
+
+        /* *ARG = pop() */
+        "@SP",
+        "AM=M-1",
+        "D=M", // d = popped value
+        "@ARG",
+        "A=M",
+        "M=D", // *arg = d
+
+        "@ARG",
+        "D=M+1",
+        "@SP",
+        "M=D", // set sp to arg+1
+
+        /* that = *(frame-1) */
+        "@1",
+        "D=A",
+        "@R13",
+        "A=M-D",
+        "D=M",
+        "@THAT",
+        "M=D",
+
+        /* this = *(frame-2) */
+        "@2",
+        "D=A",
+        "@R13",
+        "A=M-D",
+        "D=M",
+        "@THIS",
+        "M=D",
+
+        /* arg = *(frame-3) */
+        "@3",
+        "D=A",
+        "@R13",
+        "A=M-D",
+        "D=M",
+        "@ARG",
+        "M=D",
+
+        /* lcl = *(frame-4) */
+        "@4",
+        "D=A",
+        "@R13",
+        "A=M-D",
+        "D=M",
+        "@LCL",
+        "M=D",
+
+        /* goto ret */
+        "@R14",
+        "A=M",
+        "0; JMP",
+    }
+}
+
 func parseLine(line string) (VMCommand, error) {
     parts := strings.Split(line, " ")
     var useParts []string
@@ -555,6 +656,22 @@ func parseLine(line string) (VMCommand, error) {
                 case "static": return &PopStatic{Index: index}, nil
             }
             return nil, fmt.Errorf("Unknown memory area '%v'", where)
+        case "function":
+            if len(useParts) == 3 {
+                locals, err := strconv.Atoi(useParts[2])
+                if err != nil {
+                    return nil, fmt.Errorf("Expected a number for the locals '%v': %v", useParts[2], err)
+                }
+
+                return &Function{
+                    Name: useParts[1],
+                    Locals: locals,
+                }, nil
+            } else {
+                return nil, fmt.Errorf("Expected a name and number of locals for function")
+            }
+        case "return":
+            return &Return{}, nil
         case "label":
                 if len(useParts) == 2 {
                     return &Label{Name: useParts[1]}, nil
