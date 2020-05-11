@@ -1,0 +1,64 @@
+class Enemy{
+    field int x, y;
+    field int speed;
+    field int height;
+    field int score;
+    field Game game;
+
+    constructor Enemy new(int x_, int y_, int speed_, Game game_){
+        let x = x_;
+        let y = y_;
+        let score = 0;
+        let speed = speed_;
+        let height = 25;
+        let game = game_;
+        return this;
+    }
+
+    method int getScore() {
+        return score;
+    }
+
+    method void increaseScore() {
+        let score = score + 1;
+        return;
+    }
+
+    method bool touch(int cx, int cy){
+        var int x1, y1, y2;
+
+        let x1 = x - 2;
+        let y1 = y - (height/2);
+        let y2 = y + (height/2);
+
+        if ((cy > y1) & (cy < y2) & (cx > x1)){
+            return true;
+        }
+
+        return false;
+    }
+
+    method void move(Ball ball){
+        if (ball.getY() < y){
+            let y = y - Math.min(speed, y - ball.getY());
+        }
+        if (ball.getY() > y ){
+            let y = y + Math.min(speed, ball.getY() - y);
+        }
+            
+        let y = Math.max(y - 3, game.getMinY() + (height/2));
+        let y = Math.min(y + 3, game.getMaxY() - (height/2));
+
+        return;
+    }
+
+    method void draw(){
+        var int x1, y1, x2, y2;
+        let x1 = x - 2;
+        let x2 = x + 2;
+        let y1 = y - (height/2);
+        let y2 = y + (height/2);
+        do Screen.drawRectangle(x1, y1, x2, y2);
+        return;
+    }
+}

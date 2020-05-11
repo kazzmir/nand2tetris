@@ -1,0 +1,78 @@
+class Ball {
+    field int x, y;
+    field int startX, startY;
+    field int dx, dy;
+    field Game game;
+
+    constructor Ball new(int x_, int y_, int dx_, int dy_, Game game_){
+        let startX = x_;
+        let startY = y_;
+        let x = x_;
+        let y = y_;
+        let dx = dx_;
+        let dy = dy_;
+        let game = game_;
+        return this;
+    }
+
+    method int getX() {
+        return x;
+    }
+
+    method int getY() {
+        return y;
+    }
+
+    method void move(Player player, Enemy enemy){
+        var int minY, maxY;
+        let minY = game.getMinY();
+        let maxY = game.getMaxY();
+
+        let x = x+dx;
+        let y = y+dy;
+
+        if (player.touch(x, y)){
+            let x = x - dx;
+            let dx = -dx;
+        }
+        if (enemy.touch(x, y)){
+            let x = x - dx;
+            let dx = -dx;
+        }
+
+        if ((x < game.getMinX()) | (x > game.getMaxX())) {
+            if (x < game.getMinX()){
+                do enemy.increaseScore();
+            }
+            if (x > game.getMaxX()){
+                do player.increaseScore();
+            }
+
+            let x = startX;
+            let y = startY;
+        }
+        if (y < minY){
+            let y = minY + (minY - y);
+            let dy = -dy;
+        }
+        if (y > maxY){
+            let y = maxY - (y - maxY);
+            let dy = -dy;
+        }
+
+        return;
+    }
+
+    method void draw(bool debug){
+        if (debug){
+            do Output.moveCursor(0, 0);
+            do Output.printString("x");
+            do Output.printInt(x);
+            do Output.printString(" y");
+            do Output.printInt(y);
+        }
+
+        do Screen.drawCircle(x, y, 5);
+        return;
+    }
+}

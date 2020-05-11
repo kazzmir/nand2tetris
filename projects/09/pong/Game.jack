@@ -1,0 +1,69 @@
+class Game {
+    field Ball ball;
+    field Player player;
+    field Enemy enemy;
+    field int minX, maxX, minY, maxY;
+
+    constructor Game new() {
+        let minX = 10;
+        let maxX = 500;
+        let minY = 20;
+        let maxY = 250;
+        let ball = Ball.new((minX + maxX) / 2, (minY + maxY) / 2, 3, 2, this);
+        let player = Player.new(minX + 5, (minY + maxY) / 2, this);
+        let enemy = Enemy.new(maxX - 5, (minY + maxY) / 2, 1, this);
+        return this;
+    }
+
+    method int getMinX() {
+        return minX;
+    }
+
+    method int getMaxX() {
+        return maxX;
+    }
+
+    method int getMinY() {
+        return minY;
+    }
+
+    method int getMaxY() {
+        return maxY;
+    }
+
+    method void draw(bool debug){
+        do Screen.drawLine(minX, minY, maxX, minY);
+        do Screen.drawLine(minX, maxY, maxX, maxY);
+
+        do Screen.drawLine(minX, minY, minX, maxY);
+        do Screen.drawLine(maxX, minY, maxX, maxY);
+        return;
+    }
+
+    method void run() {
+        var bool debug;
+        let debug = false;
+        while (true) {
+            // do Output.printString("running game");
+            do player.move();
+            do enemy.move(ball);
+            do ball.move(player, enemy);
+
+            do Screen.clearScreen();
+            do draw(debug);
+
+            do Output.moveCursor(0, 0);
+            do Output.printString("Player ");
+            do Output.printInt(player.getScore());
+            do Output.printString(" Enemy ");
+            do Output.printInt(enemy.getScore());
+
+            do player.draw();
+            do enemy.draw();
+            do ball.draw(debug);
+            do Sys.wait(50);
+
+        }
+        return;
+    }
+}

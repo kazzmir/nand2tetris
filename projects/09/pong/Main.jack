@@ -1,6 +1,9 @@
 class Main {
     function void main() {
-        do Output.printString("hi");
+        var Game game;
+        let game = Game.new();
+        do game.run();
+
         return;
     }
 }
