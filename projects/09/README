@@ -1,0 +1,5 @@
+Symlink JackCompiler.sh and VMEmulator.sh into this directory from the nand2tetris project directory.
+
+Then run 'make'.
+
+Then open the VMEmulator and load the 'pong' directory.
