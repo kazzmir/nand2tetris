@@ -52,6 +52,7 @@ func TestLexerIdentifierThis(test *testing.T){
         makeIdentifierMachine(),
         makeThisMachine(),
     }
+    /* an identifier should parse because its a longer match then 'this' */
     tokens, err := lexer(machines, strings.NewReader("thisthis"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
@@ -67,5 +68,44 @@ func TestLexerIdentifierThis(test *testing.T){
 
     if tokens[0].Value != "thisthis" {
         test.Fatalf("identifier value was not 'thisthis': %v", tokens[0].Value)
+    }
+}
+
+func TestLexerIdentifierThis2(test *testing.T){
+    machines := []LexerStateMachine{
+        makeIdentifierMachine(),
+        makeThisMachine(),
+    }
+    /* 'this' should match because it is higher precedence than identifier */
+    tokens, err := lexer(machines, strings.NewReader("this"))
+    if err != nil {
+        test.Fatalf("error was not nil: %v", err)
+    }
+
+    if len(tokens) != 1 {
+        test.Fatalf("did not parse exactly one token %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenThis {
+        test.Fatalf("did not parse a this token %v", tokens)
+    }
+}
+
+func TestLexerIdentifierNumber(test *testing.T){
+    machines := []LexerStateMachine{
+        makeIdentifierMachine(),
+        makeNumberMachine(),
+    }
+    tokens, err := lexer(machines, strings.NewReader("12"))
+    if err != nil {
+        test.Fatalf("error was not nil: %v", err)
+    }
+
+    if len(tokens) != 1 {
+        test.Fatalf("did not parse exactly one token %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenNumber {
+        test.Fatalf("did not parse a number token %v", tokens)
     }
 }
