@@ -109,3 +109,58 @@ func TestLexerIdentifierNumber(test *testing.T){
         test.Fatalf("did not parse a number token %v", tokens)
     }
 }
+
+func TestPlus(test *testing.T){
+    tokens, err := lexer([]LexerStateMachine{makePlusMachine()}, strings.NewReader("+"))
+    if err != nil {
+        test.Fatalf("error was not nil: %v", err)
+    }
+
+    if len(tokens) != 1 {
+        test.Fatalf("did not parse exactly one token: %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenPlus {
+        test.Fatalf("did not parse +: %v", tokens)
+    }
+}
+
+func TestPlusFull(test *testing.T){
+    tokens, err := standardLexer(strings.NewReader("+"))
+    if err != nil {
+        test.Fatalf("error was not nil: %v", err)
+    }
+
+    if len(tokens) != 1 {
+        test.Fatalf("did not parse exactly one token: %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenPlus {
+        test.Fatalf("did not parse +: %v", tokens)
+    }
+}
+
+func TestLexerMath(test *testing.T){
+    tokens, err := standardLexer(strings.NewReader("1 + 2"))
+    if err != nil {
+        test.Fatalf("error was not nil: %v", err)
+    }
+
+    tokens = removeWhitespaceTokens(tokens)
+
+    if len(tokens) != 3 {
+        test.Fatalf("did not parse three tokens: %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenNumber {
+        test.Fatalf("did not parse token[0] as number: %v", tokens[0])
+    }
+
+    if tokens[1].Kind != TokenPlus {
+        test.Fatalf("did not parse token[1] as +: %v", tokens[1])
+    }
+
+    if tokens[2].Kind != TokenNumber {
+        test.Fatalf("did not parse token[2] as number: %v", tokens[2])
+    }
+}

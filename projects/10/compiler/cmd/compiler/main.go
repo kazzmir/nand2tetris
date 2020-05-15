@@ -2,6 +2,8 @@ package main
 
 import (
     _ "os"
+    "fmt"
+    "strings"
 )
 
 func compile(path string) error {
@@ -19,7 +21,14 @@ func compileAll(paths []string) error {
     return nil
 }
 
+func test(){
+    tokens, err := standardLexer(strings.NewReader("1 + 2"))
+    fmt.Printf("Tokens %v error %v\n", tokens, err)
+}
+
 func main(){
+    test()
+
     // TestL()
     /*
     if len(os.Args) == 1 {

@@ -25,6 +25,7 @@ const (
     TokenComment
     TokenIdentifier
     TokenNumber
+    TokenPlus
 )
 
 func (kind *TokenKind) Precedence() int {
@@ -34,9 +35,22 @@ func (kind *TokenKind) Precedence() int {
         case TokenIdentifier: return 1
         case TokenComment: return 0
         case TokenWhitespace: return 0
+        case TokenPlus: return 1
     }
 
     return 0
+}
+
+func removeWhitespaceTokens(tokens []Token) []Token {
+    var out []Token = nil
+
+    for _, token := range tokens {
+        if token.Kind != TokenWhitespace && token.Kind != TokenComment {
+            out = append(out, token)
+        }
+    }
+
+    return out
 }
 
 type Token struct {
@@ -89,8 +103,6 @@ type LiteralMachine struct {
 }
 
 func (literal *LiteralMachine) Consume(c byte) bool {
-    // fmt.Printf("literal '%v' consuming %v\n", literal.Literal, c)
-
     if literal.position < len(literal.Literal) && literal.Literal[literal.position] == c {
         literal.position += 1
         return true
@@ -235,6 +247,10 @@ func makeNumberMachine() LexerStateMachine {
     return &NumberMachine{stopped: false}
 }
 
+func makePlusMachine() LexerStateMachine {
+    return buildLiteralMachine("+", TokenPlus)
+}
+
 /* for each state machine, call machine(c). it returns token and bool which is
  * the completed token, and true = can match more, or false = cannot match c
  *
@@ -268,6 +284,8 @@ func makeLexerMachines() []LexerStateMachine {
         makeThisMachine(),
         makeWhileMachine(),
         makeIdentifierMachine(),
+        makeNumberMachine(),
+        makePlusMachine(),
     }
 }
 
@@ -328,8 +346,6 @@ func lexer(machines []LexerStateMachine, reader io.Reader) ([]Token, error) {
                 length := end-1 - start
                 token, err := machine.Token(start, end-1)
 
-                // fmt.Printf("Check token %v\n", token)
-
                 if err == nil {
                     if length == 0 {
                         continue
@@ -353,10 +369,11 @@ func lexer(machines []LexerStateMachine, reader io.Reader) ([]Token, error) {
             }
 
             token := breakTies(possible)
+            // fmt.Printf("Parsed %v\n", token)
             out = append(out, token)
 
             partial = nil
-            start = end
+            start = end - 1
 
             if readErr == io.EOF {
                 return out, nil
