@@ -73,7 +73,6 @@ type LiteralMachine struct {
 
     position int
     stopped bool
-    emit bool
 }
 
 func (literal *LiteralMachine) Consume(c byte) bool {
@@ -85,7 +84,6 @@ func (literal *LiteralMachine) Consume(c byte) bool {
     }
 
     literal.stopped = true
-    literal.emit = !unicode.IsLetter(rune(c))
 
     return false
 }
@@ -93,7 +91,6 @@ func (literal *LiteralMachine) Consume(c byte) bool {
 func (literal *LiteralMachine) Reset() {
     literal.stopped = false
     literal.position = 0
-    literal.emit = false
 }
 
 var NoToken error = errors.New("no-token")
@@ -122,8 +119,54 @@ func buildLiteralMachine(literal string, kind TokenKind) LexerStateMachine {
         Kind: kind,
         position: 0,
         stopped: false,
-        emit: false,
     }
+}
+
+type IdentifierMachine struct {
+    LexerStateMachine
+
+    Name []byte
+    stopped bool
+}
+
+func (identifier *IdentifierMachine) Consume(c byte) bool {
+    if unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c)) {
+        identifier.Name = append(identifier.Name, c)
+        return true
+    }
+
+    identifier.stopped = true
+    return false
+}
+
+func (identifier *IdentifierMachine) Alive() bool {
+    return !identifier.stopped
+}
+
+func (identifier *IdentifierMachine) Reset() {
+    identifier.stopped = false
+    identifier.Name = nil
+}
+
+func (identifier *IdentifierMachine) Token(start uint64, end uint64) (Token, error) {
+    if len(identifier.Name) > 0 {
+        return Token{
+            Kind: TokenIdentifier,
+            Value: string(identifier.Name),
+            Start: start,
+            End: end,
+        }, nil
+    }
+
+    return Token{}, NoToken
+}
+
+func makeIdentifierMachine() LexerStateMachine {
+    return &IdentifierMachine{Name: nil, stopped: false}
+}
+
+func makeThisMachine() LexerStateMachine {
+    return buildLiteralMachine("this", TokenThis)
 }
 
 /* for each state machine, call machine(c). it returns token and bool which is
@@ -156,8 +199,9 @@ func buildLiteralMachine(literal string, kind TokenKind) LexerStateMachine {
 func makeLexerMachines() []LexerStateMachine {
     return []LexerStateMachine{
         &WhiteSpaceMachine{stopped: false},
-        buildLiteralMachine("this", TokenThis),
+        makeThisMachine(),
         buildLiteralMachine("while", TokenWhile),
+        makeIdentifierMachine(),
     }
 }
 
