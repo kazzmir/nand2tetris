@@ -23,15 +23,30 @@ const (
     TokenWhile
     TokenWhitespace
     TokenComment
+    TokenIf
     TokenIdentifier
     TokenNumber
     TokenPlus
+    TokenMethod
+    TokenVoid
+    TokenLeftParens
+    TokenRightParens
+    TokenLeftCurly
+    TokenRightCurly
+    TokenEquals
+    TokenDot
+    TokenSemicolon
+    TokenReturn
 )
 
 func (kind *TokenKind) Precedence() int {
     switch *kind {
         /* keywords should have the highest precedence */
-        case TokenThis, TokenWhile: return 10
+        case TokenThis, TokenWhile, TokenMethod,
+             TokenVoid, TokenIf, TokenReturn: return 10
+        case TokenLeftParens, TokenRightParens,
+             TokenLeftCurly, TokenRightCurly: return 1
+        case TokenEquals, TokenDot, TokenSemicolon: return 1
         case TokenIdentifier: return 1
         case TokenComment: return 0
         case TokenWhitespace: return 0
@@ -67,7 +82,7 @@ type WhiteSpaceMachine struct {
 }
 
 func (space *WhiteSpaceMachine) Consume(c byte) bool {
-    if c == ' ' || c == '\t' {
+    if c == ' ' || c == '\t' || c == '\n' {
         return true
     }
 
@@ -247,8 +262,52 @@ func makeNumberMachine() LexerStateMachine {
     return &NumberMachine{stopped: false}
 }
 
+func makeMethodMachine() LexerStateMachine {
+    return buildLiteralMachine("method", TokenMethod)
+}
+
+func makeVoidMachine() LexerStateMachine {
+    return buildLiteralMachine("void", TokenVoid)
+}
+
 func makePlusMachine() LexerStateMachine {
     return buildLiteralMachine("+", TokenPlus)
+}
+
+func makeLeftParensMachine() LexerStateMachine {
+    return buildLiteralMachine("(", TokenLeftParens)
+}
+
+func makeRightParensMachine() LexerStateMachine {
+    return buildLiteralMachine(")", TokenRightParens)
+}
+
+func makeLeftCurlyMachine() LexerStateMachine {
+    return buildLiteralMachine("{", TokenLeftParens)
+}
+
+func makeRightCurlyMachine() LexerStateMachine {
+    return buildLiteralMachine("}", TokenRightCurly)
+}
+
+func makeEqualsMachine() LexerStateMachine {
+    return buildLiteralMachine("=", TokenEquals)
+}
+
+func makeDotMachine() LexerStateMachine {
+    return buildLiteralMachine(".", TokenDot)
+}
+
+func makeSemicolonMachine() LexerStateMachine {
+    return buildLiteralMachine(";", TokenSemicolon)
+}
+
+func makeIfMachine() LexerStateMachine {
+    return buildLiteralMachine("if", TokenIf)
+}
+
+func makeReturnMachine() LexerStateMachine {
+    return buildLiteralMachine("return", TokenReturn)
 }
 
 /* for each state machine, call machine(c). it returns token and bool which is
@@ -286,6 +345,17 @@ func makeLexerMachines() []LexerStateMachine {
         makeIdentifierMachine(),
         makeNumberMachine(),
         makePlusMachine(),
+        makeMethodMachine(),
+        makeVoidMachine(),
+        makeLeftParensMachine(),
+        makeRightParensMachine(),
+        makeLeftCurlyMachine(),
+        makeRightCurlyMachine(),
+        makeIfMachine(),
+        makeEqualsMachine(),
+        makeDotMachine(),
+        makeSemicolonMachine(),
+        makeReturnMachine(),
     }
 }
 

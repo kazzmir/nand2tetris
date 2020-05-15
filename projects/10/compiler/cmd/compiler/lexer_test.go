@@ -164,3 +164,30 @@ func TestLexerMath(test *testing.T){
         test.Fatalf("did not parse token[2] as number: %v", tokens[2])
     }
 }
+
+func TestLexerSmallProgram(test *testing.T){
+    text := `method void moveSquare() {
+      if (direction = 1) { do square.moveUp(); }
+      if (direction = 2) { do square.moveDown(); }
+      if (direction = 3) { do square.moveLeft(); }
+      if (direction = 4) { do square.moveRight(); }
+      do Sys.wait(5);
+      return;
+   }
+`
+
+    tokens, err := standardLexer(strings.NewReader(text))
+    if err != nil {
+        test.Fatalf("did not parse: %v", err)
+    }
+
+    tokens = removeWhitespaceTokens(tokens)
+
+    if len(tokens) < 5 {
+        test.Fatalf("did not parse all the tokens: %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenMethod {
+        test.Fatalf("did not parse a method token: %v", tokens[0])
+    }
+}
