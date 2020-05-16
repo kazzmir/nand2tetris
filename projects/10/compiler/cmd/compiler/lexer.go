@@ -374,36 +374,38 @@ func breakTies(tokens []Token) Token {
     return out
 }
 
-func lexer(machines []LexerStateMachine, reader io.Reader) ([]Token, error) {
-    var out []Token
+func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token) error {
+    defer close(emitToken)
 
     bufferedReader := bufio.NewReader(reader)
 
     c, readErr := bufferedReader.ReadByte()
 
     if readErr != nil && readErr == io.EOF {
-        return out, nil
+        return nil
     }
     if readErr != nil {
-        return nil, readErr
+        return readErr
     }
 
     partial := []byte{c}
     var start uint64 = 0
     var end uint64 = 1
 
+    emittingMachines := make([]bool, len(machines))
     for {
         count := 0
 
-        var emittingMachines []LexerStateMachine
-
-        for _, machine := range machines {
+        for i, machine := range machines {
             if machine.Alive() {
-                emittingMachines = append(emittingMachines, machine)
+                emittingMachines[i] = true
+                // emittingMachines = append(emittingMachines, machine)
                 ok := machine.Consume(c)
                 if ok {
                     count += 1
                 }
+            } else {
+                emittingMachines[i] = false
             }
         }
 
@@ -412,7 +414,12 @@ func lexer(machines []LexerStateMachine, reader io.Reader) ([]Token, error) {
 
             var longest uint64 = 0
             var possible []Token
-            for _, machine := range emittingMachines {
+            for i, ok := range emittingMachines {
+                if !ok {
+                    continue
+                }
+                machine := machines[i]
+
                 length := end-1 - start
                 token, err := machine.Token(start, end-1)
 
@@ -435,23 +442,25 @@ func lexer(machines []LexerStateMachine, reader io.Reader) ([]Token, error) {
             }
 
             if len(possible) == 0 {
-                return nil, fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial), start, end-1)
+                return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial), start, end-1)
             }
 
             token := breakTies(possible)
+
             // fmt.Printf("Parsed %v\n", token)
-            out = append(out, token)
+            // out = append(out, token)
+            emitToken <- token
 
             partial = nil
             start = end - 1
 
             if readErr == io.EOF {
-                return out, nil
+                return nil
             }
         } else {
             /* previously read eof, so now quit */
             if readErr == io.EOF {
-                return out, nil
+                return nil
             }
 
             c, readErr = bufferedReader.ReadByte()
@@ -465,14 +474,33 @@ func lexer(machines []LexerStateMachine, reader io.Reader) ([]Token, error) {
             partial = append(partial, c)
 
             if readErr != nil {
-                return nil, readErr
+                return readErr
             }
         }
     }
 }
 
-func standardLexer(reader io.Reader) ([]Token, error) {
+func standardLexer(reader io.Reader, out chan Token) error {
     machines := makeLexerMachines()
-    return lexer(machines, reader)
+    return lexer(machines, reader, out)
 }
 
+func lexerTokenSequence(machines []LexerStateMachine, reader io.Reader) ([]Token, error) {
+    output := make(chan Token, 1000)
+    var err error
+    go func(){
+        err = lexer(machines, reader, output)
+    }()
+
+    var out []Token
+    for token := range output {
+        out = append(out, token)
+    }
+
+    return out, err
+
+}
+
+func standardLexerTokenSequence(reader io.Reader) ([]Token, error) {
+    return lexerTokenSequence(makeLexerMachines(), reader)
+}

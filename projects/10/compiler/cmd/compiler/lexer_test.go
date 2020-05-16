@@ -15,7 +15,7 @@ func TestLexer1(test *testing.T) {
 
 func TestLexerThis(test *testing.T) {
     /* with only the 'this' lexeme this should produce two This tokens */
-    doubleThis, err := lexer([]LexerStateMachine{
+    doubleThis, err := lexerTokenSequence([]LexerStateMachine{
         buildLiteralMachine("this", TokenThis),
     }, strings.NewReader("thisthis"))
 
@@ -33,7 +33,7 @@ func TestLexerThis(test *testing.T) {
 }
 
 func TestLexerIdentifier(test *testing.T){
-    tokens, err := lexer([]LexerStateMachine{makeIdentifierMachine()}, strings.NewReader("anidentifier"))
+    tokens, err := lexerTokenSequence([]LexerStateMachine{makeIdentifierMachine()}, strings.NewReader("anidentifier"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
     }
@@ -53,7 +53,7 @@ func TestLexerIdentifierThis(test *testing.T){
         makeThisMachine(),
     }
     /* an identifier should parse because its a longer match then 'this' */
-    tokens, err := lexer(machines, strings.NewReader("thisthis"))
+    tokens, err := lexerTokenSequence(machines, strings.NewReader("thisthis"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
     }
@@ -77,7 +77,7 @@ func TestLexerIdentifierThis2(test *testing.T){
         makeThisMachine(),
     }
     /* 'this' should match because it is higher precedence than identifier */
-    tokens, err := lexer(machines, strings.NewReader("this"))
+    tokens, err := lexerTokenSequence(machines, strings.NewReader("this"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
     }
@@ -96,7 +96,7 @@ func TestLexerIdentifierNumber(test *testing.T){
         makeIdentifierMachine(),
         makeNumberMachine(),
     }
-    tokens, err := lexer(machines, strings.NewReader("12"))
+    tokens, err := lexerTokenSequence(machines, strings.NewReader("12"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
     }
@@ -111,7 +111,7 @@ func TestLexerIdentifierNumber(test *testing.T){
 }
 
 func TestPlus(test *testing.T){
-    tokens, err := lexer([]LexerStateMachine{makePlusMachine()}, strings.NewReader("+"))
+    tokens, err := lexerTokenSequence([]LexerStateMachine{makePlusMachine()}, strings.NewReader("+"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
     }
@@ -126,7 +126,7 @@ func TestPlus(test *testing.T){
 }
 
 func TestPlusFull(test *testing.T){
-    tokens, err := standardLexer(strings.NewReader("+"))
+    tokens, err := standardLexerTokenSequence(strings.NewReader("+"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
     }
@@ -141,7 +141,7 @@ func TestPlusFull(test *testing.T){
 }
 
 func TestLexerMath(test *testing.T){
-    tokens, err := standardLexer(strings.NewReader("1 + 2"))
+    tokens, err := standardLexerTokenSequence(strings.NewReader("1 + 2"))
     if err != nil {
         test.Fatalf("error was not nil: %v", err)
     }
@@ -176,7 +176,7 @@ func TestLexerSmallProgram(test *testing.T){
    }
 `
 
-    tokens, err := standardLexer(strings.NewReader(text))
+    tokens, err := standardLexerTokenSequence(strings.NewReader(text))
     if err != nil {
         test.Fatalf("did not parse: %v", err)
     }
