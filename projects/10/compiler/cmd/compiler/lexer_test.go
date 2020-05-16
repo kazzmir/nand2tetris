@@ -191,3 +191,39 @@ func TestLexerSmallProgram(test *testing.T){
         test.Fatalf("did not parse a method token: %v", tokens[0])
     }
 }
+
+func TestLexerComment(test *testing.T) {
+    text := `1 // nothing is here
+2 // more emptiness
+`
+    tokens, err := standardLexerTokenSequence(strings.NewReader(text))
+    if err != nil {
+        test.Fatalf("did not parse: %v", err)
+    }
+
+    tokens = removeWhitespaceTokens(tokens)
+
+    if len(tokens) != 2 {
+        test.Fatalf("did not parse all the tokens: %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenNumber || tokens[1].Kind != TokenNumber {
+        test.Fatalf("did not parse two numbers: %v", tokens)
+    }
+
+}
+
+func TestLexerComment2(test *testing.T) {
+    text := `// nothing
+
+// more nothing
+`
+    tokens, err := standardLexerTokenSequence(strings.NewReader(text))
+    if err != nil {
+        test.Fatalf("did not parse: %v", err)
+    }
+
+    if len(tokens) != 3 {
+        test.Fatalf("did not parse all the tokens: %v", tokens)
+    }
+}

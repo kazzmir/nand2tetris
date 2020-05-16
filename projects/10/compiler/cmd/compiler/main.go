@@ -26,6 +26,7 @@ func compile(path string) error {
     for token := range tokens {
         _ = token
         count += 1
+        // fmt.Printf("%+v\n", token)
     }
 
     if err != nil {

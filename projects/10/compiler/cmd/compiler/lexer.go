@@ -14,7 +14,7 @@ type LexerStateMachine interface {
     Consume(c byte) bool
     Alive() bool
     Reset()
-    Token(start uint64, end uint64) (Token, error)
+    Token(line uint64, start uint64, end uint64) (Token, error)
 }
 
 type TokenKind int
@@ -38,6 +38,7 @@ const (
     TokenDot
     TokenSemicolon
     TokenReturn
+    TokenDivision
 )
 
 func (kind *TokenKind) Precedence() int {
@@ -73,6 +74,7 @@ type Token struct {
     Kind TokenKind
     Value string
     /* source location within the input */
+    Line uint64
     Start uint64
     End uint64
 }
@@ -83,7 +85,7 @@ type WhiteSpaceMachine struct {
 }
 
 func (space *WhiteSpaceMachine) Consume(c byte) bool {
-    if c == ' ' || c == '\t' || c == '\n' {
+    if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
         return true
     }
 
@@ -100,10 +102,11 @@ func (space *WhiteSpaceMachine) Reset() {
     space.stopped = false
 }
 
-func (space *WhiteSpaceMachine) Token(start uint64, end uint64) (Token, error) {
+func (space *WhiteSpaceMachine) Token(line uint64, start uint64, end uint64) (Token, error) {
     return Token{
         Kind: TokenWhitespace,
         Value: " ",
+        Line: line,
         Start: start,
         End: end,
     }, nil
@@ -136,12 +139,13 @@ func (literal *LiteralMachine) Reset() {
 
 var NoToken error = errors.New("no-token")
 
-func (literal *LiteralMachine) Token(start uint64, end uint64) (Token, error) {
+func (literal *LiteralMachine) Token(line uint64, start uint64, end uint64) (Token, error) {
     if literal.position == len(literal.Literal) /* && literal.emit */ {
         return Token{
             Kind: literal.Kind,
             Value: "",
             // Value: literal.Literal,
+            Line: line,
             Start: start,
             End: end,
         }, nil
@@ -197,11 +201,12 @@ func (identifier *IdentifierMachine) Reset() {
     identifier.Name.Grow(20)
 }
 
-func (identifier *IdentifierMachine) Token(start uint64, end uint64) (Token, error) {
+func (identifier *IdentifierMachine) Token(line uint64, start uint64, end uint64) (Token, error) {
     if identifier.Name.Len() > 0 {
         return Token{
             Kind: TokenIdentifier,
             Value: string(identifier.Name.Bytes()),
+            Line: line,
             Start: start,
             End: end,
         }, nil
@@ -236,17 +241,73 @@ func (machine *NumberMachine) Reset() {
     machine.Number.Grow(5)
 }
 
-func (machine *NumberMachine) Token(start uint64, end uint64) (Token, error) {
+func (machine *NumberMachine) Token(line uint64, start uint64, end uint64) (Token, error) {
     if machine.Number.Len() > 0 {
         return Token{
             Kind: TokenNumber,
             Value: string(machine.Number.Bytes()),
+            Line: line,
             Start: start,
             End: end,
         }, nil
     }
 
     return Token{}, NoToken
+}
+
+type SingleCommentMachine struct {
+    LexerStateMachine
+    Slashes int
+    Newline bool
+    stopped bool
+}
+
+func (machine *SingleCommentMachine) Token(line uint64, start uint64, end uint64) (Token, error) {
+    return Token{
+        Kind: TokenWhitespace,
+        Value: " ",
+        Line: line,
+        Start: start,
+        End: end,
+    }, nil
+}
+
+func (machine *SingleCommentMachine) Consume(c byte) bool {
+    if machine.Slashes == 0 {
+        if c == '/' {
+            machine.Slashes = 1
+            return true
+        }
+    } else if machine.Slashes == 1 {
+        if c == '/' {
+            machine.Slashes = 2
+            return true
+        }
+    } else {
+        if machine.Newline {
+            machine.stopped = true
+            return false
+        }
+
+        if c == '\n' {
+            machine.Newline = true
+        }
+
+        return true
+    }
+
+    machine.stopped = true
+    return false
+}
+
+func (machine *SingleCommentMachine) Alive() bool {
+    return !machine.stopped
+}
+
+func (machine *SingleCommentMachine) Reset() {
+    machine.Slashes = 0
+    machine.Newline = false
+    machine.stopped = false
 }
 
 func makeIdentifierMachine() LexerStateMachine {
@@ -317,6 +378,16 @@ func makeReturnMachine() LexerStateMachine {
     return buildLiteralMachine("return", TokenReturn)
 }
 
+func makeDivisionMachine() LexerStateMachine {
+    return buildLiteralMachine("/", TokenReturn)
+}
+
+func makeSingleCommentMachine() LexerStateMachine {
+    machine := &SingleCommentMachine{}
+    machine.Reset()
+    return machine
+}
+
 /* for each state machine, call machine(c). it returns token and bool which is
  * the completed token, and true = can match more, or false = cannot match c
  *
@@ -363,6 +434,8 @@ func makeLexerMachines() []LexerStateMachine {
         makeDotMachine(),
         makeSemicolonMachine(),
         makeReturnMachine(),
+        makeDivisionMachine(),
+        makeSingleCommentMachine(),
     }
 }
 
@@ -406,6 +479,13 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
         aliveMachines[i] = true
     }
 
+    var line uint64 = 1
+    inLine := 1
+
+    if c == '\n' {
+        line += 1
+    }
+
     for {
         count := 0
 
@@ -439,9 +519,18 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
             /* In a lot of cases there is only one emitter, so just find that machine directly */
             if emitters == 1 {
                 machine := machines[emitter]
-                token, err := machine.Token(start, end-1)
+                token, err := machine.Token(line, start, end-1)
                 if err != nil {
-                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial.Bytes()), start, end-1)
+                    for i := 0; i < 10; i++ {
+                        b, err := bufferedReader.ReadByte()
+                        if err != nil || b == '\n'{
+                            break
+                        } else {
+                            partial.WriteByte(b)
+                        }
+                    }
+
+                    return fmt.Errorf("Could not tokenize '%v' at line %v position %v", string(partial.Bytes()), line, inLine)
                 }
                 emitToken <- token
             } else {
@@ -454,7 +543,7 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
                     machine := machines[i]
 
                     length := end-1 - start
-                    token, err := machine.Token(start, end-1)
+                    token, err := machine.Token(line, start, end-1)
 
                     if err == nil {
                         if length == 0 {
@@ -471,7 +560,16 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
                 }
 
                 if len(possible) == 0 {
-                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial.Bytes()), start, end-1)
+                    for i := 0; i < 10; i++ {
+                        b, err := bufferedReader.ReadByte()
+                        if err != nil || b == '\n' {
+                            break
+                        } else {
+                            partial.WriteByte(b)
+                        }
+                    }
+
+                    return fmt.Errorf("Could not tokenize '%v' at line %v position %v", string(partial.Bytes()), line, inLine)
                 }
 
                 token := breakTies(possible)
@@ -508,6 +606,13 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
             }
 
             partial.WriteByte(c)
+
+            if c == '\n' {
+                line += 1
+                inLine = 1
+            } else {
+                inLine += 1
+            }
 
             if readErr != nil {
                 return readErr
