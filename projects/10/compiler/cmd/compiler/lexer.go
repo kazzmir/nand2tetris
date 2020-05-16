@@ -5,6 +5,7 @@ import (
     "io"
     "fmt"
     "bufio"
+    "bytes"
     "errors"
     "unicode"
 )
@@ -165,20 +166,20 @@ func buildLiteralMachine(literal string, kind TokenKind) LexerStateMachine {
 type IdentifierMachine struct {
     LexerStateMachine
 
-    Name []byte
+    Name bytes.Buffer
     stopped bool
 }
 
 func (identifier *IdentifierMachine) Consume(c byte) bool {
     /* must start with a letter */
-    if len(identifier.Name) == 0 {
+    if identifier.Name.Len() == 0 {
         if unicode.IsLetter(rune(c)) {
-            identifier.Name = append(identifier.Name, c)
+            identifier.Name.WriteByte(c)
             return true
         }
     /* then it can be numbers of letters */
     } else if unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c)) {
-        identifier.Name = append(identifier.Name, c)
+        identifier.Name.WriteByte(c)
         return true
     }
 
@@ -192,14 +193,15 @@ func (identifier *IdentifierMachine) Alive() bool {
 
 func (identifier *IdentifierMachine) Reset() {
     identifier.stopped = false
-    identifier.Name = nil
+    identifier.Name.Reset()
+    identifier.Name.Grow(20)
 }
 
 func (identifier *IdentifierMachine) Token(start uint64, end uint64) (Token, error) {
-    if len(identifier.Name) > 0 {
+    if identifier.Name.Len() > 0 {
         return Token{
             Kind: TokenIdentifier,
-            Value: string(identifier.Name),
+            Value: string(identifier.Name.Bytes()),
             Start: start,
             End: end,
         }, nil
@@ -210,13 +212,13 @@ func (identifier *IdentifierMachine) Token(start uint64, end uint64) (Token, err
 
 type NumberMachine struct {
     LexerStateMachine
-    Number []byte
+    Number bytes.Buffer
     stopped bool
 }
 
 func (machine *NumberMachine) Consume(c byte) bool {
     if unicode.IsDigit(rune(c)) {
-        machine.Number = append(machine.Number, c)
+        machine.Number.WriteByte(c)
         return true
     }
 
@@ -230,14 +232,15 @@ func (machine *NumberMachine) Alive() bool {
 
 func (machine *NumberMachine) Reset() {
     machine.stopped = false
-    machine.Number = nil
+    machine.Number.Reset()
+    machine.Number.Grow(5)
 }
 
 func (machine *NumberMachine) Token(start uint64, end uint64) (Token, error) {
-    if len(machine.Number) > 0 {
+    if machine.Number.Len() > 0 {
         return Token{
             Kind: TokenNumber,
-            Value: string(machine.Number),
+            Value: string(machine.Number.Bytes()),
             Start: start,
             End: end,
         }, nil
@@ -247,7 +250,9 @@ func (machine *NumberMachine) Token(start uint64, end uint64) (Token, error) {
 }
 
 func makeIdentifierMachine() LexerStateMachine {
-    return &IdentifierMachine{Name: nil, stopped: false}
+    machine := &IdentifierMachine{}
+    machine.Reset()
+    return machine
 }
 
 func makeThisMachine() LexerStateMachine {
@@ -259,7 +264,9 @@ func makeWhileMachine() LexerStateMachine {
 }
 
 func makeNumberMachine() LexerStateMachine {
-    return &NumberMachine{stopped: false}
+    machine := &NumberMachine{}
+    machine.Reset()
+    return machine
 }
 
 func makeMethodMachine() LexerStateMachine {
@@ -388,7 +395,8 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
         return readErr
     }
 
-    partial := []byte{c}
+    var partial bytes.Buffer
+    partial.WriteByte(c)
     var start uint64 = 0
     var end uint64 = 1
 
@@ -433,7 +441,7 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
                 machine := machines[emitter]
                 token, err := machine.Token(start, end-1)
                 if err != nil {
-                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial), start, end-1)
+                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial.Bytes()), start, end-1)
                 }
                 emitToken <- token
             } else {
@@ -463,7 +471,7 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
                 }
 
                 if len(possible) == 0 {
-                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial), start, end-1)
+                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial.Bytes()), start, end-1)
                 }
 
                 token := breakTies(possible)
@@ -478,7 +486,8 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
             // fmt.Printf("Parsed %v\n", token)
             // out = append(out, token)
 
-            partial = nil
+            partial.Reset()
+            partial.Grow(10)
             start = end - 1
 
             if readErr == io.EOF {
@@ -498,7 +507,7 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
                 continue
             }
 
-            partial = append(partial, c)
+            partial.WriteByte(c)
 
             if readErr != nil {
                 return readErr

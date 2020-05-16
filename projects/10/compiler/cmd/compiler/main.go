@@ -6,6 +6,7 @@ import (
     // "strings"
 
     "runtime/pprof"
+    "runtime"
 )
 
 func compile(path string) error {
@@ -69,6 +70,11 @@ func main(){
             fmt.Printf("Error: %v\n", err)
         }
     }
+
+    memory, _ := os.Create("memory.prof")
+    runtime.GC()
+    pprof.WriteHeapProfile(memory)
+    memory.Close()
 
     pprof.StopCPUProfile()
     cpu.Close()
