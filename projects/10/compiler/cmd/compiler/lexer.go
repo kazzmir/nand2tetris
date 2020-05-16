@@ -393,14 +393,21 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
     var end uint64 = 1
 
     emittingMachines := make([]bool, len(machines))
+    aliveMachines := make([]bool, len(machines))
+    for i := 0; i < len(aliveMachines); i++ {
+        aliveMachines[i] = true
+    }
+
     for {
         count := 0
 
         for i, machine := range machines {
-            if machine.Alive() {
+            // if machine.Alive() {
+            if aliveMachines[i] {
                 emittingMachines[i] = true
                 // emittingMachines = append(emittingMachines, machine)
                 ok := machine.Consume(c)
+                aliveMachines[i] = ok
                 if ok {
                     count += 1
                 }
@@ -412,44 +419,64 @@ func lexer(machines []LexerStateMachine, reader io.Reader, emitToken chan Token)
         if count == 0 {
             /* all machines died */
 
-            var longest uint64 = 0
-            var possible []Token
+            emitters := 0
+            emitter := 0
             for i, ok := range emittingMachines {
-                if !ok {
-                    continue
+                if ok {
+                    emitters += 1
+                    emitter = i
                 }
-                machine := machines[i]
+            }
 
-                length := end-1 - start
+            /* In a lot of cases there is only one emitter, so just find that machine directly */
+            if emitters == 1 {
+                machine := machines[emitter]
                 token, err := machine.Token(start, end-1)
-
-                if err == nil {
-                    if length == 0 {
+                if err != nil {
+                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial), start, end-1)
+                }
+                emitToken <- token
+            } else {
+                var longest uint64 = 0
+                var possible []Token
+                for i, ok := range emittingMachines {
+                    if !ok {
                         continue
                     }
+                    machine := machines[i]
 
-                    if length == longest {
-                        possible = append(possible, token)
-                    } else if length > longest {
-                        possible = []Token{token}
-                        longest = length
+                    length := end-1 - start
+                    token, err := machine.Token(start, end-1)
+
+                    if err == nil {
+                        if length == 0 {
+                            continue
+                        }
+
+                        if length == longest {
+                            possible = append(possible, token)
+                        } else if length > longest {
+                            possible = []Token{token}
+                            longest = length
+                        }
                     }
                 }
+
+                if len(possible) == 0 {
+                    return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial), start, end-1)
+                }
+
+                token := breakTies(possible)
+                emitToken <- token
             }
 
-            for _, machine := range machines {
+            for i, machine := range machines {
                 machine.Reset()
+                aliveMachines[i] = true
             }
-
-            if len(possible) == 0 {
-                return fmt.Errorf("Could not tokenize '%v' from position %v to %v", string(partial), start, end-1)
-            }
-
-            token := breakTies(possible)
 
             // fmt.Printf("Parsed %v\n", token)
             // out = append(out, token)
-            emitToken <- token
 
             partial = nil
             start = end - 1
