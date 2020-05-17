@@ -3,6 +3,7 @@ package main
 import (
     "os"
     "fmt"
+    "time"
     // "strings"
 
     _ "runtime/pprof"
@@ -17,6 +18,8 @@ func compile(path string) error {
     defer file.Close()
 
     tokens := make(chan Token, 1000)
+
+    start := time.Now()
 
     go func(){
         err = standardLexer(file, tokens)
@@ -33,8 +36,10 @@ func compile(path string) error {
         return err
     }
 
+    end := time.Now()
+
     // tokens = removeWhitespaceTokens(tokens)
-    fmt.Printf("Lexed %v tokens\n", count)
+    fmt.Printf("Lexed %v tokens in %v\n", count, end.Sub(start))
     return nil
 }
 
