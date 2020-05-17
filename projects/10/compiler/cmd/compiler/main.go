@@ -5,8 +5,8 @@ import (
     "fmt"
     // "strings"
 
-    "runtime/pprof"
-    "runtime"
+    _ "runtime/pprof"
+    _ "runtime"
 )
 
 func compile(path string) error {
@@ -57,8 +57,8 @@ func test(){
 }
 
 func main(){
-    cpu, _ := os.Create("cpu.prof")
-    pprof.StartCPUProfile(cpu)
+    // cpu, _ := os.Create("cpu.prof")
+    // pprof.StartCPUProfile(cpu)
     // test()
 
     // TestL()
@@ -72,6 +72,7 @@ func main(){
         }
     }
 
+    /*
     memory, _ := os.Create("memory.prof")
     runtime.GC()
     pprof.WriteHeapProfile(memory)
@@ -79,4 +80,5 @@ func main(){
 
     pprof.StopCPUProfile()
     cpu.Close()
+    */
 }

@@ -227,3 +227,58 @@ func TestLexerComment2(test *testing.T) {
         test.Fatalf("did not parse all the tokens: %v", tokens)
     }
 }
+
+func TestLexerBlockComment(test *testing.T) {
+    text := `1/* a comment
+multi-line *#$*@#(*()!%
+unparsable junk --~~~~,,.,.,
+    .... */2`
+
+    tokens, err := standardLexerTokenSequence(strings.NewReader(text))
+    if err != nil {
+        test.Fatalf("did not parse: %v", err)
+    }
+
+    if len(tokens) != 3 {
+        test.Fatalf("did not parse all the tokens: %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenNumber {
+        test.Fatalf("did not parse a number first: %v", tokens)
+    }
+
+    if tokens[1].Kind != TokenWhitespace {
+        test.Fatalf("did not parse a block comment: %v", tokens)
+    }
+
+    if tokens[2].Kind != TokenNumber {
+        test.Fatalf("did not parse a number as the third token: %v", tokens)
+    }
+}
+
+func TestLexerString(test *testing.T){
+    text := `1 "foobar" 2`
+
+    tokens, err := standardLexerTokenSequence(strings.NewReader(text))
+    if err != nil {
+        test.Fatalf("did not parse: %v", err)
+    }
+
+    tokens = removeWhitespaceTokens(tokens)
+
+    if len(tokens) != 3 {
+        test.Fatalf("did not parse all the tokens: %v", tokens)
+    }
+
+    if tokens[0].Kind != TokenNumber {
+        test.Fatalf("did not parse a number first: %v", tokens)
+    }
+
+    if tokens[1].Kind != TokenString {
+        test.Fatalf("did not parse a string second: %v", tokens)
+    }
+
+    if tokens[2].Kind != TokenNumber {
+        test.Fatalf("did not parse a number as the third token: %v", tokens)
+    }
+}

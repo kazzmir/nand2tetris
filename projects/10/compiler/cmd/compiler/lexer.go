@@ -39,20 +39,36 @@ const (
     TokenSemicolon
     TokenReturn
     TokenDivision
+    TokenVar
+    TokenComma
+    TokenString
+    TokenLeftBracket
+    TokenRightBracket
+    TokenNegation
+    TokenTrue
+    TokenFalse
+    TokenMultiply
+    TokenOr
+    TokenAnd
+    TokenNot
+    TokenLessThan
+    TokenGreaterThan
 )
 
 func (kind *TokenKind) Precedence() int {
     switch *kind {
         /* keywords should have the highest precedence */
         case TokenThis, TokenWhile, TokenMethod,
-             TokenVoid, TokenIf, TokenReturn: return 10
+             TokenVoid, TokenIf, TokenReturn,
+             TokenVar, TokenTrue, TokenFalse: return 10
         case TokenLeftParens, TokenRightParens,
              TokenLeftCurly, TokenRightCurly: return 1
-        case TokenEquals, TokenDot, TokenSemicolon: return 1
+        case TokenEquals, TokenDot, TokenSemicolon,
+             TokenComma, TokenString: return 1
         case TokenIdentifier: return 1
         case TokenComment: return 0
         case TokenWhitespace: return 0
-        case TokenPlus: return 1
+        case TokenPlus, TokenDivision: return 1
     }
 
     return 0
@@ -310,6 +326,122 @@ func (machine *SingleCommentMachine) Reset() {
     machine.stopped = false
 }
 
+type BlockCommentMachine struct {
+    LexerStateMachine
+    OpenComment int // will be 1 if only '/' is seen, and 2 if '/*' is seen
+    CloseComment int // will be 1 if only '*' is seen, and 2 if '*/' is seen
+    stopped bool
+}
+
+func (machine *BlockCommentMachine) Alive() bool {
+    return !machine.stopped
+}
+
+func (machine *BlockCommentMachine) Reset() {
+    machine.OpenComment = 0
+    machine.CloseComment = 0
+    machine.stopped = false
+}
+
+func (machine *BlockCommentMachine) Consume(c byte) bool {
+    if machine.OpenComment == 0 {
+        if c == '/' {
+            machine.OpenComment = 1
+            return true
+        }
+    } else if machine.OpenComment == 1 {
+        if c == '*' {
+            machine.OpenComment = 2
+            return true
+        } else {
+            /* saw something other than a '*' so this is not a comment */
+            machine.stopped = true
+            return false
+        }
+    } else if machine.CloseComment == 0 {
+        if c == '*' {
+            machine.CloseComment = 1
+        }
+
+        return true
+    } else if machine.CloseComment == 1 {
+        if c == '/' {
+            machine.CloseComment = 2
+        } else {
+            /* saw a '*' but didnt see a '/', so this is not a close comment */
+            machine.CloseComment = 0
+        }
+
+        return true
+    } else if machine.CloseComment == 2 {
+        /* saw a '*' and '/' so this comment is done */
+        machine.stopped = true
+        return false
+    }
+
+    return false
+}
+
+func (machine *BlockCommentMachine) Token(line uint64, start uint64, end uint64) (Token, error) {
+    return Token{
+        Kind: TokenWhitespace,
+        Value: " ",
+        Line: line,
+        Start: start,
+        End: end,
+    }, nil
+}
+
+type StringMachine struct {
+    LexerStateMachine
+    Quote int // 1 for the starting quote, 2 for the ending quote
+    Text bytes.Buffer // actual string contents
+    stopped bool
+}
+
+func (machine *StringMachine) Alive() bool {
+    return !machine.stopped
+}
+
+func (machine *StringMachine) Consume(c byte) bool {
+    if machine.Quote == 0 {
+        if c == '"' {
+            machine.Quote = 1
+            return true
+        }
+    } else if machine.Quote == 1 {
+        if c == '"' {
+            machine.Quote = 2
+        } else {
+            machine.Text.WriteByte(c)
+        }
+
+        return true
+    }
+
+    machine.stopped = true
+    return false
+}
+
+func (machine *StringMachine) Token(line uint64, start uint64, end uint64) (Token, error) {
+    if machine.Quote == 2 {
+        return Token{
+            Kind: TokenString,
+            Value: string(machine.Text.Bytes()),
+            Line: line,
+            Start: start,
+            End: end,
+        }, nil
+    }
+
+    return Token{}, fmt.Errorf("did not parse a string")
+}
+
+func (machine *StringMachine) Reset() {
+    machine.Quote = 0
+    machine.stopped = false
+}
+
 func makeIdentifierMachine() LexerStateMachine {
     machine := &IdentifierMachine{}
     machine.Reset()
@@ -378,12 +510,76 @@ func makeReturnMachine() LexerStateMachine {
     return buildLiteralMachine("return", TokenReturn)
 }
 
+func makeVarMachine() LexerStateMachine {
+    return buildLiteralMachine("var", TokenVar)
+}
+
+func makeCommaMachine() LexerStateMachine {
+    return buildLiteralMachine(",", TokenComma)
+}
+
 func makeDivisionMachine() LexerStateMachine {
     return buildLiteralMachine("/", TokenReturn)
 }
 
+func makeLeftBracketMachine() LexerStateMachine {
+    return buildLiteralMachine("[", TokenLeftBracket)
+}
+
+func makeRightBracketMachine() LexerStateMachine {
+    return buildLiteralMachine("]", TokenRightBracket)
+}
+
+func makeNegationMachine() LexerStateMachine {
+    return buildLiteralMachine("-", TokenNegation)
+}
+
+func makeTrueMachine() LexerStateMachine {
+    return buildLiteralMachine("true", TokenTrue)
+}
+
+func makeFalseMachine() LexerStateMachine {
+    return buildLiteralMachine("false", TokenFalse)
+}
+
+func makeMultiplyMachine() LexerStateMachine {
+    return buildLiteralMachine("*", TokenMultiply)
+}
+
+func makeOrMachine() LexerStateMachine {
+    return buildLiteralMachine("|", TokenOr)
+}
+
+func makeAndMachine() LexerStateMachine {
+    return buildLiteralMachine("&", TokenAnd)
+}
+
+func makeNotMachine() LexerStateMachine {
+    return buildLiteralMachine("~", TokenNot)
+}
+
+func makeLessThanMachine() LexerStateMachine {
+    return buildLiteralMachine("<", TokenLessThan)
+}
+
+func makeGreaterThanMachine() LexerStateMachine {
+    return buildLiteralMachine(">", TokenGreaterThan)
+}
+
 func makeSingleCommentMachine() LexerStateMachine {
     machine := &SingleCommentMachine{}
+    machine.Reset()
+    return machine
+}
+
+func makeBlockCommentMachine() LexerStateMachine {
+    machine := &BlockCommentMachine{}
+    machine.Reset()
+    return machine
+}
+
+func makeStringMachine() LexerStateMachine {
+    machine := &StringMachine{}
     machine.Reset()
     return machine
 }
@@ -436,6 +632,21 @@ func makeLexerMachines() []LexerStateMachine {
         makeReturnMachine(),
         makeDivisionMachine(),
         makeSingleCommentMachine(),
+        makeBlockCommentMachine(),
+        makeVarMachine(),
+        makeCommaMachine(),
+        makeStringMachine(),
+        makeLeftBracketMachine(),
+        makeRightBracketMachine(),
+        makeNegationMachine(),
+        makeTrueMachine(),
+        makeFalseMachine(),
+        makeMultiplyMachine(),
+        makeOrMachine(),
+        makeAndMachine(),
+        makeNotMachine(),
+        makeLessThanMachine(),
+        makeGreaterThanMachine(),
     }
 }
 
