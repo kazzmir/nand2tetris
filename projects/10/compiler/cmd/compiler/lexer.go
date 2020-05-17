@@ -67,6 +67,58 @@ const (
     TokenChar
 )
 
+func (kind *TokenKind) Name() string {
+    switch *kind {
+        case TokenThis: return "this"
+        case TokenWhile: return "while"
+        case TokenWhitespace: return "whitespace"
+        case TokenComment: return "comment"
+        case TokenIf: return "if"
+        case TokenElse: return "else"
+        case TokenIdentifier: return "identifier"
+        case TokenNumber: return "number"
+        case TokenPlus: return "plus"
+        case TokenMethod: return "method"
+        case TokenField: return "field"
+        case TokenConstructor: return "constructor"
+        case TokenClass: return "class"
+        case TokenFunction: return "function"
+        case TokenNull: return "null"
+        case TokenVoid: return "void"
+        case TokenStatic: return "static"
+        case TokenLeftParens: return "("
+        case TokenRightParens: return ")"
+        case TokenLeftCurly: return "{"
+        case TokenRightCurly: return "}"
+        case TokenEquals: return "="
+        case TokenDot: return "."
+        case TokenDo: return "do"
+        case TokenSemicolon: return ";"
+        case TokenReturn: return "return"
+        case TokenDivision: return "/"
+        case TokenVar: return "var"
+        case TokenLet: return "let"
+        case TokenComma: return ","
+        case TokenString: return "string"
+        case TokenLeftBracket: return "["
+        case TokenRightBracket: return "]"
+        case TokenNegation: return "-"
+        case TokenTrue: return "true"
+        case TokenFalse: return "false"
+        case TokenMultiply: return "*"
+        case TokenOr: return "|"
+        case TokenAnd: return "&"
+        case TokenNot: return "~"
+        case TokenLessThan: return "<"
+        case TokenGreaterThan: return ">"
+        case TokenInt: return "int"
+        case TokenBoolean: return "boolean"
+        case TokenChar: return "char"
+    }
+
+    return "??"
+}
+
 func (kind *TokenKind) Precedence() int {
     switch *kind {
         /* keywords should have the highest precedence */
@@ -539,7 +591,7 @@ func makeRightParensMachine() LexerStateMachine {
 }
 
 func makeLeftCurlyMachine() LexerStateMachine {
-    return buildLiteralMachine("{", TokenLeftParens)
+    return buildLiteralMachine("{", TokenLeftCurly)
 }
 
 func makeRightCurlyMachine() LexerStateMachine {
