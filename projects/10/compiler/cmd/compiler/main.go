@@ -10,7 +10,7 @@ import (
     _ "runtime"
 )
 
-func compile(path string) error {
+func lex(path string) error {
     file, err := os.Open(path)
     if err != nil {
         return err
@@ -40,6 +40,29 @@ func compile(path string) error {
 
     // tokens = removeWhitespaceTokens(tokens)
     fmt.Printf("Lexed %v tokens in %v\n", count, end.Sub(start))
+    return nil
+}
+
+func compile(path string) error {
+    file, err := os.Open(path)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+
+    start := time.Now()
+
+    ast, err := parse(file)
+    if err != nil {
+        return err
+    }
+
+    end := time.Now()
+
+    fmt.Printf("Parsed %v in %v\n", path, end.Sub(start))
+
+    _ = ast
+
     return nil
 }
 

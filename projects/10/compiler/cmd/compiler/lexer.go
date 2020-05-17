@@ -163,6 +163,10 @@ type Token struct {
     End uint64
 }
 
+func (token *Token) String() string {
+    return fmt.Sprintf("'%v' at line %v position %v", token.Kind.Name(), token.Line, token.Start)
+}
+
 type WhiteSpaceMachine struct {
     LexerStateMachine
     stopped bool
