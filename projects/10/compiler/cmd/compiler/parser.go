@@ -20,6 +20,13 @@ const (
     ASTKindVar
     ASTKindDo
     ASTKindReturn
+    ASTKindExpression
+    ASTKindConstant
+    ASTKindCall
+    ASTKindMethodCall
+    ASTKindThis
+    ASTKindReference
+    ASTKindOperator
 )
 
 type ASTNode interface {
@@ -37,6 +44,26 @@ func (ast *ASTClass) Kind() Kind {
     return ASTKindClass
 }
 
+type ASTCall struct {
+    ASTExpression
+    Name string
+    Arguments []ASTExpression
+}
+
+func (ast *ASTCall) Kind() Kind {
+    return ASTKindCall
+}
+
+type ASTMethodCall struct {
+    ASTExpression
+    Left ASTExpression
+    Call *ASTCall
+}
+
+func (ast *ASTMethodCall) Kind() Kind {
+    return ASTKindMethodCall
+}
+
 type ASTType struct {
     ASTNode
     /* will either be an int, char, boolean, or identifier */
@@ -45,6 +72,43 @@ type ASTType struct {
 
 func (ast *ASTType) Kind() Kind {
     return ASTKindType
+}
+
+type ASTOperator struct {
+    ASTExpression
+    Operator TokenKind // lame to use TokenKind here
+    Left ASTExpression
+    Right ASTExpression
+}
+
+func (ast *ASTOperator) Kind() Kind {
+    return ASTKindOperator
+}
+
+type ASTThis struct {
+    ASTExpression
+}
+
+func (ast *ASTThis) Kind() Kind {
+    return ASTKindThis
+}
+
+type ASTConstant struct {
+    ASTExpression
+    Number string
+}
+
+func (ast *ASTConstant) Kind() Kind {
+    return ASTKindConstant
+}
+
+type ASTReference struct {
+    ASTExpression
+    Name string
+}
+
+func (ast *ASTReference) Kind() Kind {
+    return ASTKindReference
 }
 
 type ASTFunction struct {
@@ -80,15 +144,23 @@ func (ast *ASTBlock) Kind() Kind {
 type ASTVar struct {
     ASTNode
     Type *ASTType
-    Name string
+    Names []string
 }
 
 func (ast *ASTVar) Kind() Kind {
     return ASTKindVar
 }
 
+type ASTExpression interface {
+    ASTNode
+}
+
 type ASTLet struct {
     ASTNode
+
+    Name string
+    ArrayIndex ASTExpression
+    Expression ASTExpression
 }
 
 func (ast *ASTLet) Kind() Kind {
@@ -216,7 +288,7 @@ func consumeToken(tokens *TokenStream, kind TokenKind) error {
     }
 
     if token.Kind != kind {
-        return fmt.Errorf("expected token %v but found %v", kind.Name(), token.Kind.Name())
+        return fmt.Errorf("expected token %v but found %v", kind.Name(), token.String())
     }
 
     return nil
@@ -308,13 +380,35 @@ func parseVarDeclaration(tokens *TokenStream) (*ASTVar, error) {
         return nil, err
     }
 
-    name, err := tokens.Consume()
-    if err != nil {
-        return nil, err
-    }
+    var names []string
 
-    if name.Kind != TokenIdentifier {
-        return nil, fmt.Errorf("expected a var declaration to have an identifier but got %v", name.String())
+    for {
+        name, err := tokens.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        if name.Kind == TokenSemicolon {
+            break
+        }
+
+        tokens.Consume()
+
+        if name.Kind != TokenIdentifier {
+            return nil, fmt.Errorf("expected an identifier in a var declaration: %v", name.String())
+        }
+
+        names = append(names, name.Value)
+
+        /* check if the next token is a comma, in which case just consume it */
+        next, err := tokens.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        if next.Kind == TokenComma {
+            tokens.Consume()
+        }
     }
 
     err = consumeToken(tokens, TokenSemicolon)
@@ -322,20 +416,239 @@ func parseVarDeclaration(tokens *TokenStream) (*ASTVar, error) {
         return nil, err
     }
 
+    if len(names) == 0 {
+        return nil, fmt.Errorf("no identifiers given in a var declaration")
+    }
+
     return &ASTVar{
         Type: typeNode,
-        Name: name.Value,
+        Names: names,
     }, nil
 }
 
-func parseLetDeclaration(tokens *TokenStream) (*ASTLet, error) {
-    return nil, fmt.Errorf("unimplemented")
+/* name(<expression>, ...) */
+func parseCall(tokens *TokenStream) (*ASTCall, error) {
+    name, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if name.Kind != TokenIdentifier {
+        return nil, fmt.Errorf("call must start with identifier but got %v", name.String())
+    }
+
+    err = consumeToken(tokens, TokenLeftParens)
+    if err != nil {
+        return nil, err
+    }
+
+    var arguments []ASTExpression
+
+    for {
+        next, err := tokens.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        if next.Kind == TokenRightParens {
+            break
+        }
+
+        expression, err := parseExpression(tokens)
+        if err != nil {
+            return nil, err
+        }
+
+        arguments = append(arguments, expression)
+
+        next, err = tokens.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        if next.Kind == TokenComma {
+            tokens.Consume()
+            continue
+        }
+    }
+
+    err = consumeToken(tokens, TokenRightParens)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTCall{
+        Name: name.Value,
+        Arguments: arguments,
+    }, nil
+}
+
+func parseExpressionNoOp(tokens *TokenStream) (ASTExpression, error) {
+    next, err := tokens.Next()
+    if err != nil {
+        return nil, err
+    }
+
+    switch next.Kind {
+        case TokenLeftParens:
+            tokens.Consume()
+            expression, err := parseExpression(tokens)
+            if err != nil {
+                return nil, err
+            }
+            err = consumeToken(tokens, TokenRightParens)
+            if err != nil {
+                return nil, err
+            }
+            return expression, nil
+        case TokenNumber:
+            number := next
+            tokens.Consume()
+            return &ASTConstant{Number: number.Value}, nil
+        case TokenThis, TokenIdentifier:
+            /* either a variable reference or a x.y() call,
+             * or a method call f()
+             */
+
+            id, _ := tokens.Consume()
+
+            var left ASTExpression
+
+            switch id.Kind {
+                case TokenThis:
+                    left = &ASTThis{}
+                case TokenIdentifier:
+                    left = &ASTReference{Name: id.Value}
+                default:
+                    return nil, fmt.Errorf("unknown token on the left side of a dot expression: %v", id.String())
+            }
+
+            /* Use an ASTThis node? */
+
+            next, err = tokens.Next()
+            if next.Kind == TokenDot {
+                tokens.Consume()
+
+                call, err := parseCall(tokens)
+                if err != nil {
+                    return nil, err
+                }
+
+                return &ASTMethodCall{
+                    Left: left,
+                    Call: call,
+                }, nil
+            }
+
+            return left, nil
+        default:
+            return nil, fmt.Errorf("unknown token in expression: %v", next.String())
+    }
+}
+
+func parseExpression(tokens *TokenStream) (ASTExpression, error) {
+    left, err := parseExpressionNoOp(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    next, err := tokens.Next()
+    if err != nil {
+        return nil, err
+    }
+
+    for {
+        /* check for an operator */
+        switch next.Kind {
+            case TokenPlus, TokenDivision:
+                operator, err := tokens.Consume()
+
+                right, err := parseExpressionNoOp(tokens)
+                if err != nil {
+                    return nil, err
+                }
+
+                left = &ASTOperator{
+                    Operator: operator.Kind,
+                    Left: left,
+                    Right: right,
+                }
+
+                return nil, fmt.Errorf("expression operator unimplemented")
+            default:
+                return left, nil
+        }
+    }
+}
+
+/* let <name> [<array-expression>] = <expression> ;
+ */
+func parseLet(tokens *TokenStream) (*ASTLet, error) {
+    err := consumeToken(tokens, TokenLet)
+    if err != nil {
+        return nil, err
+    }
+
+    name, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if name.Kind != TokenIdentifier {
+        return nil, fmt.Errorf("expected a name to follow 'let': %v", name)
+    }
+
+    next, err := tokens.Next()
+    if err != nil {
+        return nil, err
+    }
+
+    var arrayIndex ASTExpression
+
+    if next.Kind == TokenLeftBracket {
+        err = consumeToken(tokens, TokenLeftBracket)
+        if err != nil {
+            return nil, err
+        }
+
+        arrayIndex, err = parseExpression(tokens)
+        if err != nil {
+            return nil, err
+        }
+
+        err = consumeToken(tokens, TokenRightBracket)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    err = consumeToken(tokens, TokenEquals)
+    if err != nil {
+        return nil, err
+    }
+
+    expression, err := parseExpression(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    err = consumeToken(tokens, TokenSemicolon)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTLet{
+        Name: name.Value,
+        ArrayIndex: arrayIndex,
+        Expression: expression,
+    }, nil
 }
 
 func parseDo(tokens *TokenStream) (*ASTDo, error) {
     return nil, fmt.Errorf("unimplemented")
 }
 
+/* return [<expression>] */
 func parseReturn(tokens *TokenStream) (*ASTReturn, error) {
     return nil, fmt.Errorf("unimplemented")
 }
@@ -362,7 +675,7 @@ func parseBlock(tokens *TokenStream) (*ASTBlock, error) {
                 }
                 statements = append(statements, varDeclaration)
             case TokenLet:
-                letDeclaration, err := parseLetDeclaration(tokens)
+                letDeclaration, err := parseLet(tokens)
                 if err != nil {
                     return nil, err
                 }
@@ -431,6 +744,9 @@ func parseFunction(tokens *TokenStream) (*ASTFunction, error) {
     }
 
     body, err := parseBlock(tokens)
+    if err != nil {
+        return nil, err
+    }
 
     return &ASTFunction{
         ReturnType: typeNode,

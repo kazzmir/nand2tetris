@@ -17,6 +17,72 @@ func TestClassParse(test *testing.T){
     }
 }
 
+func TestVar(test *testing.T){
+    text := "var int a, b, c;"
+
+    tokens := make(chan Token, 1000)
+
+    var lexerError error
+
+    go func(){
+        lexerError = standardLexer(strings.NewReader(text), tokens)
+    }()
+
+    stream := &TokenStream{
+        tokens: tokens,
+        hasNext: false,
+    }
+
+    var_, err := parseVarDeclaration(stream)
+
+    if lexerError != nil {
+        test.Fatalf("failed to lex var: %v", lexerError)
+    }
+
+    if err != nil {
+        test.Fatalf("could not parse var: %v", err)
+    }
+
+    if var_.Kind() != ASTKindVar {
+        test.Fatalf("did not parse var: %v", var_)
+    }
+
+    if len(var_.Names) != 3 {
+        test.Fatalf("did not parse 3 variable names: %v", len(var_.Names))
+    }
+}
+
+func TestLetExpression(test *testing.T){
+    text := "let game = SquareGame.new();"
+
+    tokens := make(chan Token, 1000)
+
+    var lexerError error
+
+    go func(){
+        lexerError = standardLexer(strings.NewReader(text), tokens)
+    }()
+
+    stream := &TokenStream{
+        tokens: tokens,
+        hasNext: false,
+    }
+
+    let, err := parseLet(stream)
+
+    if lexerError != nil {
+        test.Fatalf("failed to lex var: %v", lexerError)
+    }
+
+    if err != nil {
+        test.Fatalf("could not parse let: %v", err)
+    }
+
+    if let.Kind() != ASTKindLet {
+        test.Fatalf("did not parse let: %v", let)
+    }
+}
+
 func TestSmallProgramParse(test *testing.T){
     text := `
 // This file is part of www.nand2tetris.org
