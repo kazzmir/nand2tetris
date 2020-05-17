@@ -25,21 +25,30 @@ const (
     TokenWhitespace
     TokenComment
     TokenIf
+    TokenElse
     TokenIdentifier
     TokenNumber
     TokenPlus
     TokenMethod
+    TokenField
+    TokenConstructor
+    TokenClass
+    TokenFunction
+    TokenNull
     TokenVoid
+    TokenStatic
     TokenLeftParens
     TokenRightParens
     TokenLeftCurly
     TokenRightCurly
     TokenEquals
     TokenDot
+    TokenDo
     TokenSemicolon
     TokenReturn
     TokenDivision
     TokenVar
+    TokenLet
     TokenComma
     TokenString
     TokenLeftBracket
@@ -53,14 +62,21 @@ const (
     TokenNot
     TokenLessThan
     TokenGreaterThan
+    TokenInt
+    TokenBoolean
+    TokenChar
 )
 
 func (kind *TokenKind) Precedence() int {
     switch *kind {
         /* keywords should have the highest precedence */
         case TokenThis, TokenWhile, TokenMethod,
+             TokenFunction, TokenClass, TokenConstructor,
              TokenVoid, TokenIf, TokenReturn,
-             TokenVar, TokenTrue, TokenFalse: return 10
+             TokenInt, TokenBoolean, TokenChar,
+             TokenVar, TokenTrue, TokenFalse,
+             TokenStatic, TokenElse, TokenDo,
+             TokenLet, TokenNull, TokenField: return 10
         case TokenLeftParens, TokenRightParens,
              TokenLeftCurly, TokenRightCurly: return 1
         case TokenEquals, TokenDot, TokenSemicolon,
@@ -193,12 +209,12 @@ type IdentifierMachine struct {
 func (identifier *IdentifierMachine) Consume(c byte) bool {
     /* must start with a letter */
     if identifier.Name.Len() == 0 {
-        if unicode.IsLetter(rune(c)) {
+        if c == '_' || unicode.IsLetter(rune(c)) {
             identifier.Name.WriteByte(c)
             return true
         }
     /* then it can be numbers of letters */
-    } else if unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c)) {
+    } else if c == '_' || unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c)) {
         identifier.Name.WriteByte(c)
         return true
     }
@@ -466,8 +482,48 @@ func makeMethodMachine() LexerStateMachine {
     return buildLiteralMachine("method", TokenMethod)
 }
 
+func makeFieldMachine() LexerStateMachine {
+    return buildLiteralMachine("field", TokenField)
+}
+
+func makeDoMachine() LexerStateMachine {
+    return buildLiteralMachine("do", TokenDo)
+}
+
+func makeNullMachine() LexerStateMachine {
+    return buildLiteralMachine("null", TokenNull)
+}
+
+func makeStaticMachine() LexerStateMachine {
+    return buildLiteralMachine("static", TokenStatic)
+}
+
+func makeConstructorMachine() LexerStateMachine {
+    return buildLiteralMachine("constructor", TokenConstructor)
+}
+
+func makeClassMachine() LexerStateMachine {
+    return buildLiteralMachine("class", TokenClass)
+}
+
+func makeFunctionMachine() LexerStateMachine {
+    return buildLiteralMachine("function", TokenFunction)
+}
+
 func makeVoidMachine() LexerStateMachine {
     return buildLiteralMachine("void", TokenVoid)
+}
+
+func makeIntMachine() LexerStateMachine {
+    return buildLiteralMachine("int", TokenInt)
+}
+
+func makeBooleanMachine() LexerStateMachine {
+    return buildLiteralMachine("boolean", TokenBoolean)
+}
+
+func makeCharMachine() LexerStateMachine {
+    return buildLiteralMachine("char", TokenChar)
 }
 
 func makePlusMachine() LexerStateMachine {
@@ -506,12 +562,20 @@ func makeIfMachine() LexerStateMachine {
     return buildLiteralMachine("if", TokenIf)
 }
 
+func makeElseMachine() LexerStateMachine {
+    return buildLiteralMachine("else", TokenElse)
+}
+
 func makeReturnMachine() LexerStateMachine {
     return buildLiteralMachine("return", TokenReturn)
 }
 
 func makeVarMachine() LexerStateMachine {
     return buildLiteralMachine("var", TokenVar)
+}
+
+func makeLetMachine() LexerStateMachine {
+    return buildLiteralMachine("let", TokenLet)
 }
 
 func makeCommaMachine() LexerStateMachine {
@@ -620,12 +684,23 @@ func makeLexerMachines() []LexerStateMachine {
         makeNumberMachine(),
         makePlusMachine(),
         makeMethodMachine(),
+        makeFieldMachine(),
+        makeDoMachine(),
+        makeNullMachine(),
+        makeStaticMachine(),
+        makeConstructorMachine(),
+        makeClassMachine(),
+        makeFunctionMachine(),
         makeVoidMachine(),
+        makeIntMachine(),
+        makeBooleanMachine(),
+        makeCharMachine(),
         makeLeftParensMachine(),
         makeRightParensMachine(),
         makeLeftCurlyMachine(),
         makeRightCurlyMachine(),
         makeIfMachine(),
+        makeElseMachine(),
         makeEqualsMachine(),
         makeDotMachine(),
         makeSemicolonMachine(),
@@ -634,6 +709,7 @@ func makeLexerMachines() []LexerStateMachine {
         makeSingleCommentMachine(),
         makeBlockCommentMachine(),
         makeVarMachine(),
+        makeLetMachine(),
         makeCommaMachine(),
         makeStringMachine(),
         makeLeftBracketMachine(),
