@@ -28,7 +28,46 @@ const (
     ASTKindReference
     ASTKindOperator
     ASTKindIf
+    ASTKindBoolean
+    ASTKindString
+    ASTKindNull
+    ASTKindIndexExpression
+    ASTKindNot
+    ASTKindNegation
 )
+
+func (kind Kind) Name() string {
+    switch kind {
+    case ASTKindClass: return "class"
+    case ASTKindIdentifier: return "identifier"
+    case ASTKindStaticDeclaration: return "static field"
+    case ASTKindType: return "type"
+    case ASTKindField: return "field"
+    case ASTKindFunction: return "function"
+    case ASTKindParameter: return "parameter"
+    case ASTKindBlock: return "block"
+    case ASTKindLet: return "let"
+    case ASTKindVar: return "var"
+    case ASTKindDo: return "do"
+    case ASTKindReturn: return "return"
+    case ASTKindExpression: return "expression"
+    case ASTKindConstant: return "constant"
+    case ASTKindCall: return "call"
+    case ASTKindMethodCall: return "method call"
+    case ASTKindThis: return "this"
+    case ASTKindReference: return "reference"
+    case ASTKindOperator: return "operator"
+    case ASTKindIf: return "if"
+    case ASTKindBoolean: return "boolean"
+    case ASTKindString: return "string"
+    case ASTKindNull: return "null"
+    case ASTKindIndexExpression: return "array index expression"
+    case ASTKindNot: return "not"
+    case ASTKindNegation: return "negation"
+    }
+
+    return "??"
+}
 
 type ASTNode interface {
     Kind() Kind
@@ -55,6 +94,33 @@ func (ast *ASTCall) Kind() Kind {
     return ASTKindCall
 }
 
+type ASTString struct {
+    ASTExpression
+    Value string
+}
+
+func (ast *ASTString) Kind() Kind {
+    return ASTKindString
+}
+
+type ASTNull struct {
+    ASTExpression
+}
+
+func (ast *ASTNull) Kind() Kind {
+    return ASTKindNull
+}
+
+type ASTIndexExpression struct {
+    ASTExpression
+    Left ASTExpression
+    Index ASTExpression
+}
+
+func (ast *ASTIndexExpression) Kind() Kind {
+    return ASTKindIndexExpression
+}
+
 type ASTMethodCall struct {
     ASTExpression
     Left ASTExpression
@@ -63,6 +129,33 @@ type ASTMethodCall struct {
 
 func (ast *ASTMethodCall) Kind() Kind {
     return ASTKindMethodCall
+}
+
+type ASTNot struct {
+    ASTExpression
+    Expression ASTExpression
+}
+
+func (ast *ASTNot) Kind() Kind {
+    return ASTKindNot
+}
+
+type ASTNegation struct {
+    ASTExpression
+    Expression ASTExpression
+}
+
+func (ast *ASTNegation) Kind() Kind {
+    return ASTKindNegation
+}
+
+type ASTBoolean struct {
+    ASTExpression
+    Value bool
+}
+
+func (ast *ASTBoolean) Kind() Kind {
+    return ASTKindBoolean
 }
 
 type ASTType struct {
@@ -77,6 +170,9 @@ func (ast *ASTType) Kind() Kind {
 
 type ASTIf struct {
     ASTNode
+    Condition ASTExpression
+    Then *ASTBlock
+    Else *ASTBlock
 }
 
 func (ast *ASTIf) Kind() Kind {
@@ -224,7 +320,7 @@ func (ast *ASTField) Kind() Kind {
 func isExpression(ast ASTNode) bool {
     switch ast.Kind() {
         case ASTKindCall, ASTKindReference, ASTKindThis, ASTKindOperator,
-             ASTKindMethodCall: return true
+             ASTKindMethodCall, ASTKindNegation, ASTKindNot: return true
         default: return false
     }
 }
@@ -539,6 +635,16 @@ func parseExpressionNoOp(tokens *TokenStream) (ASTExpression, error) {
                 return nil, err
             }
             return expression, nil
+        case TokenTrue, TokenFalse:
+            tokens.Consume()
+            isTrue := next.Kind == TokenTrue
+            return &ASTBoolean{Value: isTrue}, nil
+        case TokenString:
+            tokens.Consume()
+            return &ASTString{Value: next.Value}, nil
+        case TokenNull:
+            tokens.Consume()
+            return &ASTNull{}, nil
         case TokenNumber:
             number := next
             tokens.Consume()
@@ -627,8 +733,72 @@ func parseExpressionNoOp(tokens *TokenStream) (ASTExpression, error) {
     }
 }
 
-func parseExpression(tokens *TokenStream) (ASTExpression, error) {
+func parseExpressionArrayIndex(tokens *TokenStream) (ASTExpression, error) {
     left, err := parseExpressionNoOp(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    next, err := tokens.Next()
+    if err != nil {
+        return nil, err
+    }
+
+    /* array index */
+    if next.Kind == TokenLeftBracket {
+        tokens.Consume()
+
+        index, err := parseExpression(tokens)
+        if err != nil {
+            return nil, err
+        }
+
+        err = consumeToken(tokens, TokenRightBracket)
+        if err != nil {
+            return nil, err
+        }
+
+        return &ASTIndexExpression{
+            Left: left,
+            Index: index,
+        }, nil
+    } else {
+        return left, nil
+    }
+}
+
+func parseExpressionUnary(tokens *TokenStream) (ASTExpression, error) {
+    next, err := tokens.Next()
+    if err != nil {
+        return nil, err
+    }
+
+    switch next.Kind {
+        case TokenNot, TokenNegation:
+            tokens.Consume()
+            expression, err := parseExpressionArrayIndex(tokens)
+            if err != nil {
+                return nil, err
+            }
+
+            if next.Kind == TokenNot {
+                return &ASTNot{
+                    Expression: expression,
+                }, nil
+            } else if next.Kind == TokenNegation {
+                return &ASTNegation{
+                    Expression: expression,
+                }, nil
+            } else {
+                return nil, fmt.Errorf("internal error")
+            }
+        default:
+            return parseExpressionArrayIndex(tokens)
+    }
+}
+
+func parseExpression(tokens *TokenStream) (ASTExpression, error) {
+    left, err := parseExpressionUnary(tokens)
     if err != nil {
         return nil, err
     }
@@ -641,10 +811,11 @@ func parseExpression(tokens *TokenStream) (ASTExpression, error) {
 
         /* check for an operator */
         switch next.Kind {
-            case TokenPlus, TokenDivision, TokenMultiply:
+            case TokenPlus, TokenDivision, TokenMultiply,
+                 TokenOr, TokenAnd, TokenNegation:
                 operator, err := tokens.Consume()
 
-                right, err := parseExpressionNoOp(tokens)
+                right, err := parseExpressionUnary(tokens)
                 if err != nil {
                     return nil, fmt.Errorf("could not parse operator expression: %v", err)
                 }
@@ -713,7 +884,7 @@ func parseLet(tokens *TokenStream) (*ASTLet, error) {
 
     err = consumeToken(tokens, TokenSemicolon)
     if err != nil {
-        return nil, fmt.Errorf("missing a semicolon: %v", err)
+        return nil, fmt.Errorf("missing a semicolon after a let: %v", err)
     }
 
     return &ASTLet{
@@ -784,7 +955,55 @@ func parseReturn(tokens *TokenStream) (*ASTReturn, error) {
 }
 
 func parseIf(tokens *TokenStream) (*ASTIf, error) {
-    return nil, fmt.Errorf("if unimplemented")
+    if_, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if if_.Kind != TokenIf {
+        return nil, fmt.Errorf("expected 'if' token but got %v", if_.String())
+    }
+
+    err = consumeToken(tokens, TokenLeftParens)
+    if err != nil {
+        return nil, err
+    }
+
+    condition, err := parseExpression(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    err = consumeToken(tokens, TokenRightParens)
+    if err != nil {
+        return nil, err
+    }
+
+    thenBlock, err := parseBlock(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    else_, err := tokens.Next()
+    if err != nil {
+        return nil, err
+    }
+
+    var elseBlock *ASTBlock
+
+    if else_.Kind == TokenElse {
+        tokens.Consume()
+        elseBlock, err = parseBlock(tokens)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    return &ASTIf{
+        Condition: condition,
+        Then: thenBlock,
+        Else: elseBlock,
+    }, nil
 }
 
 func parseBlock(tokens *TokenStream) (*ASTBlock, error) {

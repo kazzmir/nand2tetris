@@ -639,7 +639,7 @@ func makeCommaMachine() LexerStateMachine {
 }
 
 func makeDivisionMachine() LexerStateMachine {
-    return buildLiteralMachine("/", TokenReturn)
+    return buildLiteralMachine("/", TokenDivision)
 }
 
 func makeLeftBracketMachine() LexerStateMachine {

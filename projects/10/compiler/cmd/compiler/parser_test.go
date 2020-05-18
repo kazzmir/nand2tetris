@@ -120,7 +120,7 @@ func testExpression(text string) error {
     }
 
     if !isExpression(expression) {
-        return fmt.Errorf("did not parse an expression: %v", expression.Kind())
+        return fmt.Errorf("did not parse an expression: %v", expression.Kind().Name())
     }
 
     return nil
@@ -129,7 +129,7 @@ func testExpression(text string) error {
 func doTestExpression(text string, test *testing.T){
     err := testExpression(text)
     if err != nil {
-        test.Fatalf("could not '%v' expression: %v", text, err)
+        test.Fatalf("could not parse '%v' expression: %v", text, err)
     }
 }
 
@@ -138,6 +138,9 @@ func TestExpression(test *testing.T){
     doTestExpression("1 * 1 + 2;", test)
     doTestExpression("1 * (1 + 2);", test)
     doTestExpression("x * (y + z);", test)
+    doTestExpression("x / y / -z[2];", test)
+    doTestExpression("true | false;", test)
+    doTestExpression("-2;", test)
     doTestExpression("foo();", test)
     doTestExpression("foo.bar();", test)
 }
