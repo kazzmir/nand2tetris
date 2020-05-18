@@ -27,6 +27,7 @@ const (
     ASTKindThis
     ASTKindReference
     ASTKindOperator
+    ASTKindIf
 )
 
 type ASTNode interface {
@@ -72,6 +73,14 @@ type ASTType struct {
 
 func (ast *ASTType) Kind() Kind {
     return ASTKindType
+}
+
+type ASTIf struct {
+    ASTNode
+}
+
+func (ast *ASTIf) Kind() Kind {
+    return ASTKindIf
 }
 
 type ASTOperator struct {
@@ -169,6 +178,7 @@ func (ast *ASTLet) Kind() Kind {
 
 type ASTDo struct {
     ASTNode
+    Expression ASTExpression
 }
 
 func (ast *ASTDo) Kind() Kind {
@@ -177,6 +187,7 @@ func (ast *ASTDo) Kind() Kind {
 
 type ASTReturn struct {
     ASTNode
+    Expression ASTExpression
 }
 
 func (ast *ASTReturn) Kind() Kind {
@@ -208,6 +219,14 @@ type ASTField struct {
 
 func (ast *ASTField) Kind() Kind {
     return ASTKindField
+}
+
+func isExpression(ast ASTNode) bool {
+    switch ast.Kind() {
+        case ASTKindCall, ASTKindReference, ASTKindThis, ASTKindOperator,
+             ASTKindMethodCall: return true
+        default: return false
+    }
 }
 
 /* provides single token lookahead and filters whitespace */
@@ -274,8 +293,27 @@ func parse(reader io.Reader) (ASTNode, error) {
 
     class, err := parseClass(stream)
 
+    if err != nil {
+        return nil, err
+    }
+
+    var unparsedToken Token
+    unparsed := false
+    for {
+        token, empty := stream.Consume()
+        if empty != nil {
+            break
+        }
+        unparsedToken = token
+        unparsed = true
+    }
+
     if lexerError != nil {
         return nil, lexerError
+    }
+
+    if unparsed {
+        return nil, fmt.Errorf("unparsed token %v", unparsedToken)
     }
 
     return class, err
@@ -526,18 +564,61 @@ func parseExpressionNoOp(tokens *TokenStream) (ASTExpression, error) {
             /* Use an ASTThis node? */
 
             next, err = tokens.Next()
-            if next.Kind == TokenDot {
-                tokens.Consume()
+            switch next.Kind {
+                case TokenDot:
+                    tokens.Consume()
 
-                call, err := parseCall(tokens)
-                if err != nil {
-                    return nil, err
-                }
+                    call, err := parseCall(tokens)
+                    if err != nil {
+                        return nil, err
+                    }
 
-                return &ASTMethodCall{
-                    Left: left,
-                    Call: call,
-                }, nil
+                    return &ASTMethodCall{
+                        Left: left,
+                        Call: call,
+                    }, nil
+                case TokenLeftParens:
+                    var arguments []ASTExpression
+
+                    tokens.Consume()
+
+                    for {
+                        next, err := tokens.Next()
+                        if err != nil {
+                            return nil, err
+                        }
+
+                        if next.Kind == TokenRightParens {
+                            break
+                        }
+
+                        expression, err := parseExpression(tokens)
+                        if err != nil {
+                            return nil, err
+                        }
+
+                        arguments = append(arguments, expression)
+
+                        next, err = tokens.Next()
+                        if err != nil {
+                            return nil, err
+                        }
+
+                        if next.Kind == TokenComma {
+                            tokens.Consume()
+                            continue
+                        }
+                    }
+
+                    err = consumeToken(tokens, TokenRightParens)
+                    if err != nil {
+                        return nil, err
+                    }
+
+                    return &ASTCall{
+                        Name: id.Value,
+                        Arguments: arguments,
+                    }, nil
             }
 
             return left, nil
@@ -552,20 +633,20 @@ func parseExpression(tokens *TokenStream) (ASTExpression, error) {
         return nil, err
     }
 
-    next, err := tokens.Next()
-    if err != nil {
-        return nil, err
-    }
-
     for {
+        next, err := tokens.Next()
+        if err != nil {
+            return nil, err
+        }
+
         /* check for an operator */
         switch next.Kind {
-            case TokenPlus, TokenDivision:
+            case TokenPlus, TokenDivision, TokenMultiply:
                 operator, err := tokens.Consume()
 
                 right, err := parseExpressionNoOp(tokens)
                 if err != nil {
-                    return nil, err
+                    return nil, fmt.Errorf("could not parse operator expression: %v", err)
                 }
 
                 left = &ASTOperator{
@@ -573,8 +654,6 @@ func parseExpression(tokens *TokenStream) (ASTExpression, error) {
                     Left: left,
                     Right: right,
                 }
-
-                return nil, fmt.Errorf("expression operator unimplemented")
             default:
                 return left, nil
         }
@@ -629,12 +708,12 @@ func parseLet(tokens *TokenStream) (*ASTLet, error) {
 
     expression, err := parseExpression(tokens)
     if err != nil {
-        return nil, err
+        return nil, fmt.Errorf("could not parse expression on the right hand side of a let: %v", err)
     }
 
     err = consumeToken(tokens, TokenSemicolon)
     if err != nil {
-        return nil, err
+        return nil, fmt.Errorf("missing a semicolon: %v", err)
     }
 
     return &ASTLet{
@@ -644,13 +723,68 @@ func parseLet(tokens *TokenStream) (*ASTLet, error) {
     }, nil
 }
 
+/* do <expression>; */
 func parseDo(tokens *TokenStream) (*ASTDo, error) {
-    return nil, fmt.Errorf("unimplemented")
+    do, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if do.Kind != TokenDo {
+        return nil, fmt.Errorf("expected 'do' token but got %v", do.String())
+    }
+
+    expression, err := parseExpression(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    err = consumeToken(tokens, TokenSemicolon)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTDo{
+        Expression: expression,
+    }, nil
 }
 
 /* return [<expression>] */
 func parseReturn(tokens *TokenStream) (*ASTReturn, error) {
-    return nil, fmt.Errorf("unimplemented")
+    ret, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if ret.Kind != TokenReturn {
+        return nil, fmt.Errorf("expected 'return' but found %v", ret.String())
+    }
+
+    next, err := tokens.Next()
+    if err != nil {
+        return nil, err
+    }
+
+    var expression ASTExpression
+    if next.Kind != TokenSemicolon {
+        expression, err = parseExpression(tokens)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    err = consumeToken(tokens, TokenSemicolon)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTReturn{
+        Expression: expression,
+    }, nil
+}
+
+func parseIf(tokens *TokenStream) (*ASTIf, error) {
+    return nil, fmt.Errorf("if unimplemented")
 }
 
 func parseBlock(tokens *TokenStream) (*ASTBlock, error) {
@@ -686,6 +820,12 @@ func parseBlock(tokens *TokenStream) (*ASTBlock, error) {
                     return nil, err
                 }
                 statements = append(statements, do)
+            case TokenIf:
+                if_, err := parseIf(tokens)
+                if err != nil {
+                    return nil, err
+                }
+                statements = append(statements, if_)
             case TokenRightCurly:
                 err := consumeToken(tokens, TokenRightCurly)
                 if err != nil {

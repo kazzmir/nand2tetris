@@ -3,6 +3,7 @@ package main
 import (
     "testing"
     "strings"
+    "fmt"
 )
 
 func TestClassParse(test *testing.T){
@@ -81,6 +82,64 @@ func TestLetExpression(test *testing.T){
     if let.Kind() != ASTKindLet {
         test.Fatalf("did not parse let: %v", let)
     }
+}
+
+func testExpression(text string) error {
+    tokens := make(chan Token, 1000)
+
+    var lexerError error
+
+    go func(){
+        lexerError = standardLexer(strings.NewReader(text), tokens)
+    }()
+
+    stream := &TokenStream{
+        tokens: tokens,
+        hasNext: false,
+    }
+
+    expression, err := parseExpression(stream)
+
+    if lexerError != nil {
+        return lexerError
+    }
+
+    if err != nil {
+        return err
+    }
+
+    /* make sure there are no tokens left */
+    for {
+        token, empty := stream.Consume()
+        if empty != nil {
+            break
+        }
+        if token.Kind != TokenSemicolon {
+            return fmt.Errorf("unparsed token %v", token.String())
+        }
+    }
+
+    if !isExpression(expression) {
+        return fmt.Errorf("did not parse an expression: %v", expression.Kind())
+    }
+
+    return nil
+}
+
+func doTestExpression(text string, test *testing.T){
+    err := testExpression(text)
+    if err != nil {
+        test.Fatalf("could not '%v' expression: %v", text, err)
+    }
+}
+
+func TestExpression(test *testing.T){
+    doTestExpression("1 + 1;", test)
+    doTestExpression("1 * 1 + 2;", test)
+    doTestExpression("1 * (1 + 2);", test)
+    doTestExpression("x * (y + z);", test)
+    doTestExpression("foo();", test)
+    doTestExpression("foo.bar();", test)
 }
 
 func TestSmallProgramParse(test *testing.T){
