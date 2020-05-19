@@ -34,6 +34,9 @@ const (
     ASTKindIndexExpression
     ASTKindNot
     ASTKindNegation
+    ASTKindConstructor
+    ASTKindMethod
+    ASTKindWhile
 )
 
 func (kind Kind) Name() string {
@@ -64,6 +67,9 @@ func (kind Kind) Name() string {
     case ASTKindIndexExpression: return "array index expression"
     case ASTKindNot: return "not"
     case ASTKindNegation: return "negation"
+    case ASTKindConstructor: return "constructor"
+    case ASTKindMethod: return "method"
+    case ASTKindWhile: return "while"
     }
 
     return "??"
@@ -82,6 +88,28 @@ type ASTClass struct {
 
 func (ast *ASTClass) Kind() Kind {
     return ASTKindClass
+}
+
+type ASTWhile struct {
+    ASTNode
+    Condition ASTExpression
+    Body *ASTBlock
+}
+
+func (ast *ASTWhile) Kind() Kind {
+    return ASTKindWhile
+}
+
+type ASTConstructor struct {
+    ASTNode
+    Class string
+    Name string
+    Parameters []*ASTParameter
+    Body *ASTBlock
+}
+
+func (ast *ASTConstructor) Kind() Kind {
+    return ASTKindConstructor
 }
 
 type ASTCall struct {
@@ -216,6 +244,18 @@ func (ast *ASTReference) Kind() Kind {
     return ASTKindReference
 }
 
+type ASTMethod struct {
+    ASTNode
+    ReturnType *ASTType
+    Name string
+    Parameters []*ASTParameter
+    Body *ASTBlock
+}
+
+func (ast *ASTMethod) Kind() Kind {
+    return ASTKindMethod
+}
+
 type ASTFunction struct {
     ASTNode
     ReturnType *ASTType
@@ -230,7 +270,8 @@ func (ast *ASTFunction) Kind() Kind {
 
 type ASTParameter struct {
     ASTNode
-    /* TODO */
+    Type *ASTType
+    Name string
 }
 
 func (ast *ASTParameter) Kind() Kind {
@@ -311,6 +352,8 @@ func (ast *ASTIdentifier) Kind() Kind {
 
 type ASTField struct {
     ASTNode
+    Type *ASTType
+    Name []string
 }
 
 func (ast *ASTField) Kind() Kind {
@@ -457,7 +500,7 @@ func parseTypeNode(tokens *TokenStream) (*ASTType, error) {
             }, nil
     }
 
-    return nil, fmt.Errorf("expected a type to be one of int, char, boolean, or identifier")
+    return nil, fmt.Errorf("expected a type to be one of int, char, boolean, or identifier but was %v", next.String())
 }
 
 /* static <type> <identifier> ...; */
@@ -499,8 +542,73 @@ func parseStaticDeclaration(tokens *TokenStream) (*ASTStatic, error) {
     }, nil
 }
 
+func parseIdentifierList(tokens *TokenStream) ([]string, error) {
+    var names []string
+
+    name, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if name.Kind != TokenIdentifier {
+        return nil, fmt.Errorf("expected an identifier but got %v", name.String())
+    }
+
+    names = append(names, name.Value)
+
+    for {
+        next, err := tokens.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        if next.Kind != TokenComma {
+            return names, nil
+        }
+
+        /* consume the comma */
+        tokens.Consume()
+
+        name, err = tokens.Consume()
+        if err != nil {
+            return nil, err
+        }
+
+        if name.Kind != TokenIdentifier {
+            return nil, fmt.Errorf("expected an identifier but got %v", name.String())
+        }
+
+        names = append(names, name.Value)
+    }
+
+    return names, nil
+}
+
 func parseFieldDeclaration(tokens *TokenStream) (*ASTField, error) {
-    return nil, nil
+    err := consumeToken(tokens, TokenField)
+    if err != nil {
+        return nil, err
+    }
+
+    typeNode, err := parseTypeNode(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    names, err := parseIdentifierList(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    err = consumeToken(tokens, TokenSemicolon)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTField{
+        Type: typeNode,
+        Name: names,
+    }, nil
 }
 
 func parseVarDeclaration(tokens *TokenStream) (*ASTVar, error) {
@@ -812,7 +920,8 @@ func parseExpression(tokens *TokenStream) (ASTExpression, error) {
         /* check for an operator */
         switch next.Kind {
             case TokenPlus, TokenDivision, TokenMultiply,
-                 TokenOr, TokenAnd, TokenNegation:
+                 TokenLessThan, TokenGreaterThan,
+                 TokenOr, TokenAnd, TokenNegation, TokenEquals:
                 operator, err := tokens.Consume()
 
                 right, err := parseExpressionUnary(tokens)
@@ -896,13 +1005,9 @@ func parseLet(tokens *TokenStream) (*ASTLet, error) {
 
 /* do <expression>; */
 func parseDo(tokens *TokenStream) (*ASTDo, error) {
-    do, err := tokens.Consume()
+    err := consumeToken(tokens, TokenDo)
     if err != nil {
         return nil, err
-    }
-
-    if do.Kind != TokenDo {
-        return nil, fmt.Errorf("expected 'do' token but got %v", do.String())
     }
 
     expression, err := parseExpression(tokens)
@@ -955,13 +1060,9 @@ func parseReturn(tokens *TokenStream) (*ASTReturn, error) {
 }
 
 func parseIf(tokens *TokenStream) (*ASTIf, error) {
-    if_, err := tokens.Consume()
+    err := consumeToken(tokens, TokenIf)
     if err != nil {
         return nil, err
-    }
-
-    if if_.Kind != TokenIf {
-        return nil, fmt.Errorf("expected 'if' token but got %v", if_.String())
     }
 
     err = consumeToken(tokens, TokenLeftParens)
@@ -1006,6 +1107,38 @@ func parseIf(tokens *TokenStream) (*ASTIf, error) {
     }, nil
 }
 
+func parseWhile(tokens *TokenStream) (*ASTWhile, error) {
+    err := consumeToken(tokens, TokenWhile)
+    if err != nil {
+        return nil, err
+    }
+
+    err = consumeToken(tokens, TokenLeftParens)
+    if err != nil {
+        return nil, err
+    }
+
+    condition, err := parseExpression(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    err = consumeToken(tokens, TokenRightParens)
+    if err != nil {
+        return nil, err
+    }
+
+    body, err := parseBlock(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTWhile{
+        Condition: condition,
+        Body: body,
+    }, nil
+}
+
 func parseBlock(tokens *TokenStream) (*ASTBlock, error) {
     var statements []ASTNode
 
@@ -1039,6 +1172,12 @@ func parseBlock(tokens *TokenStream) (*ASTBlock, error) {
                     return nil, err
                 }
                 statements = append(statements, do)
+            case TokenWhile:
+                while, err := parseWhile(tokens)
+                if err != nil {
+                    return nil, err
+                }
+                statements = append(statements, while)
             case TokenIf:
                 if_, err := parseIf(tokens)
                 if err != nil {
@@ -1065,6 +1204,101 @@ func parseBlock(tokens *TokenStream) (*ASTBlock, error) {
     }
 }
 
+func parseParameterList(tokens *TokenStream) ([]*ASTParameter, error) {
+    err := consumeToken(tokens, TokenLeftParens)
+    if err != nil {
+        return nil, err
+    }
+
+    var parameters []*ASTParameter
+    /* TODO: parse parameters */
+
+    for {
+        if len(parameters) > 0 {
+            next, err := tokens.Next()
+            if err != nil {
+                return nil, err
+            }
+
+            if next.Kind != TokenComma {
+                break
+            }
+
+            tokens.Consume()
+        }
+
+        next, err := tokens.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        if next.Kind == TokenRightParens {
+            break
+        }
+
+        type_, err := parseTypeNode(tokens)
+        if err != nil {
+            return nil, err
+        }
+
+        name, err := tokens.Consume()
+        if err != nil {
+            return nil, err
+        }
+
+        if name.Kind != TokenIdentifier {
+            return nil, fmt.Errorf("expected an identifier but got %v", name.String())
+        }
+
+        parameters = append(parameters, &ASTParameter{Type: type_, Name: name.Value})
+    }
+
+    err = consumeToken(tokens, TokenRightParens)
+    if err != nil {
+        return nil, err
+    }
+
+    return parameters, nil
+}
+
+func parseMethod(tokens *TokenStream) (*ASTMethod, error) {
+    err := consumeToken(tokens, TokenMethod)
+    if err != nil {
+        return nil, err
+    }
+
+    typeNode, err := parseTypeNode(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    name, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if name.Kind != TokenIdentifier {
+        return nil, fmt.Errorf("expected an identifier for the method name but got %v", name.String())
+    }
+
+    parameters, err := parseParameterList(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    body, err := parseBlock(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTMethod{
+        ReturnType: typeNode,
+        Name: name.Value,
+        Parameters: parameters,
+        Body: body,
+    }, nil
+}
+
 func parseFunction(tokens *TokenStream) (*ASTFunction, error) {
     function, err := tokens.Consume()
     if err != nil {
@@ -1089,15 +1323,7 @@ func parseFunction(tokens *TokenStream) (*ASTFunction, error) {
         return nil, fmt.Errorf("expected an identifier for the function name but got %v", name.String())
     }
 
-    err = consumeToken(tokens, TokenLeftParens)
-    if err != nil {
-        return nil, err
-    }
-
-    /* TODO: parse parameters */
-    var parameters []*ASTParameter
-
-    err = consumeToken(tokens, TokenRightParens)
+    parameters, err := parseParameterList(tokens)
     if err != nil {
         return nil, err
     }
@@ -1109,6 +1335,50 @@ func parseFunction(tokens *TokenStream) (*ASTFunction, error) {
 
     return &ASTFunction{
         ReturnType: typeNode,
+        Name: name.Value,
+        Parameters: parameters,
+        Body: body,
+    }, nil
+}
+
+func parseConstructor(tokens *TokenStream) (*ASTConstructor, error) {
+    err := consumeToken(tokens, TokenConstructor)
+    if err != nil {
+        return nil, err
+    }
+
+    /* the class name must be the same as the file */
+    class, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if class.Kind != TokenIdentifier {
+        return nil, fmt.Errorf("expected an identifier but found %v", class)
+    }
+
+    /* I think name always has to be 'new', so we could check it here */
+    name, err := tokens.Consume()
+    if err != nil {
+        return nil, err
+    }
+
+    if name.Kind != TokenIdentifier {
+        return nil, fmt.Errorf("expected an identifier but found %v", name)
+    }
+
+    parameters, err := parseParameterList(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    body, err := parseBlock(tokens)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ASTConstructor{
+        Class: class.Value,
         Name: name.Value,
         Parameters: parameters,
         Body: body,
@@ -1137,12 +1407,24 @@ func parseClassBody(tokens *TokenStream) ([]ASTNode, error) {
                     return nil, err
                 }
                 out = append(out, field)
+            case TokenMethod:
+                method, err := parseMethod(tokens)
+                if err != nil {
+                    return nil, err
+                }
+                out = append(out, method)
             case TokenFunction:
                 function, err := parseFunction(tokens)
                 if err != nil {
                     return nil, err
                 }
                 out = append(out, function)
+            case TokenConstructor:
+                constructor, err := parseConstructor(tokens)
+                if err != nil {
+                    return nil, err
+                }
+                out = append(out, constructor)
             default:
                 return out, nil
         }
@@ -1156,7 +1438,7 @@ func parseClass(tokens *TokenStream) (*ASTClass, error) {
     }
 
     if class.Kind != TokenClass {
-        return nil, fmt.Errorf("expected a 'class' keyword but got %v", class)
+        return nil, fmt.Errorf("expected a 'class' keyword but got %v", class.String())
     }
 
     name, err := tokens.Consume()
@@ -1166,7 +1448,7 @@ func parseClass(tokens *TokenStream) (*ASTClass, error) {
     }
 
     if name.Kind != TokenIdentifier {
-        return nil, fmt.Errorf("expected an identifier to follow the 'class' keyword: %v", name)
+        return nil, fmt.Errorf("expected an identifier to follow the 'class' keyword: %v", name.String())
     }
 
     err = consumeToken(tokens, TokenLeftCurly)
