@@ -376,3 +376,37 @@ class y {
         test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
     }
 }
+
+func TestStatic(test *testing.T){
+    text := `
+class y {
+    static int z;
+    function void main() {
+        var int a;
+        let z = 2;
+        let a = z + 1;
+        return;
+    }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function y.main 1",
+        "push constant 2",
+        "pop static 0",
+        "push static 0",
+        "push constant 1",
+        "add",
+        "pop local 0",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}

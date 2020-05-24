@@ -203,6 +203,11 @@ func (function *FunctionGenerator) VisitReference(ast *ASTReference) (interface{
         return nil, nil
     }
 
+    if function.CodeGenerator.IsStatic(ast.Name) {
+        emitter <- fmt.Sprintf("push static %v", function.CodeGenerator.GetStatic(ast.Name))
+        return nil, nil
+    }
+
     return nil, fmt.Errorf("function generator: unknown reference %v", ast.Name)
 }
 
@@ -331,6 +336,9 @@ func (function *FunctionGenerator) VisitLet(ast *ASTLet) (interface{}, error) {
     } else if function.IsLocal(ast.Name) {
         function.CodeGenerator.Emit <- fmt.Sprintf("pop local %v", function.GetLocal(ast.Name))
         return nil, nil
+    } else if function.CodeGenerator.IsStatic(ast.Name) {
+        function.CodeGenerator.Emit <- fmt.Sprintf("pop static %v", function.CodeGenerator.GetStatic(ast.Name))
+        return nil, nil
     }
 
     return nil, fmt.Errorf("let: unknown name %v", ast.Name)
@@ -411,6 +419,9 @@ type CodeGenerator struct {
 
     Fields map[string]int
     FieldCount int
+
+    Statics map[string]int
+    StaticCount int
 }
 
 func (generator *CodeGenerator) RegisterClass(name string){
@@ -420,6 +431,24 @@ func (generator *CodeGenerator) RegisterClass(name string){
 func (generator *CodeGenerator) IsClass(name string) bool {
     _, ok := generator.Classes[name]
     return ok
+}
+
+func (generator *CodeGenerator) RegisterStatic(name string){
+    generator.Statics[name] = generator.StaticCount
+    generator.StaticCount += 1
+}
+
+func (generator *CodeGenerator) IsStatic(name string) bool {
+    _, ok := generator.Statics[name]
+    return ok
+}
+
+func (generator *CodeGenerator) GetStatic(name string) int {
+    value, ok := generator.Statics[name]
+    if !ok {
+        return -1
+    }
+    return value
 }
 
 func (generator *CodeGenerator) RegisterField(name string){
@@ -606,8 +635,12 @@ func (generator *CodeGenerator) VisitReturn(*ASTReturn) (interface{}, error) {
     return nil, fmt.Errorf("unimplemented return")
 }
 
-func (generator *CodeGenerator) VisitStatic(*ASTStatic) (interface{}, error) {
-    return nil, fmt.Errorf("unimplemented static")
+func (generator *CodeGenerator) VisitStatic(ast *ASTStatic) (interface{}, error) {
+    for _, name := range ast.Names {
+        generator.RegisterStatic(name.Name)
+    }
+
+    return nil, nil
 }
 
 func (generator *CodeGenerator) VisitField(ast *ASTField) (interface{}, error) {
@@ -628,6 +661,7 @@ func GenerateCode(ast ASTNode, writer io.Writer) error {
     generator := CodeGenerator{
         Emit: vmChannel,
         Fields: make(map[string]int),
+        Statics: make(map[string]int),
         Classes: classes,
     }
     var codegenError error
