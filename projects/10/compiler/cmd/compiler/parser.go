@@ -85,6 +85,7 @@ type ASTVisitor interface {
     VisitCall(*ASTCall) (interface{}, error)
     VisitIndexExpression(*ASTIndexExpression) (interface{}, error)
     VisitVar(*ASTVar) (interface{}, error)
+    VisitBlock(*ASTBlock) (interface{}, error)
     VisitMethodCall(*ASTMethodCall) (interface{}, error)
     VisitNot(*ASTNot) (interface{}, error)
     VisitNegation(*ASTNegation) (interface{}, error)
@@ -515,6 +516,10 @@ func (ast *ASTParameter) ToSExpression() string {
 
 type ASTBlock struct {
     Statements []ASTNode
+}
+
+func (ast *ASTBlock) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitBlock(ast)
 }
 
 func (ast *ASTBlock) ToSExpression() string {

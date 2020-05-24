@@ -3,6 +3,7 @@ package main
 import (
     "os"
     "fmt"
+    "bufio"
     "time"
     // "strings"
 
@@ -61,9 +62,23 @@ func compile(path string) error {
 
     fmt.Printf("Parsed %v in %v\n", path, end.Sub(start))
 
+    /*
     fmt.Printf("%v\n", ast.ToSExpression())
+    */
 
-    _ = ast
+    output, err := os.Create("out.vm")
+    if err != nil {
+        return err
+    }
+    defer output.Close()
+
+    buffer := bufio.NewWriter(output)
+    defer buffer.Flush()
+
+    err = GenerateCode(ast, buffer)
+    if err != nil {
+        return err
+    }
 
     return nil
 }
