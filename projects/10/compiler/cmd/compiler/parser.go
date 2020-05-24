@@ -76,9 +76,38 @@ func (kind Kind) Name() string {
     return "??"
 }
 
+type ASTVisitor interface {
+    VisitClass(*ASTClass) (interface{}, error)
+    VisitIdentifier(*ASTIdentifier) (interface{}, error)
+    VisitBoolean(*ASTBoolean) (interface{}, error)
+    VisitString(*ASTString) (interface{}, error)
+    VisitNull(*ASTNull) (interface{}, error)
+    VisitCall(*ASTCall) (interface{}, error)
+    VisitIndexExpression(*ASTIndexExpression) (interface{}, error)
+    VisitVar(*ASTVar) (interface{}, error)
+    VisitMethodCall(*ASTMethodCall) (interface{}, error)
+    VisitNot(*ASTNot) (interface{}, error)
+    VisitNegation(*ASTNegation) (interface{}, error)
+    VisitOperator(*ASTOperator) (interface{}, error)
+    VisitThis(*ASTThis) (interface{}, error)
+    VisitConstant(*ASTConstant) (interface{}, error)
+    VisitReference(*ASTReference) (interface{}, error)
+    VisitWhile(*ASTWhile) (interface{}, error)
+    VisitConstructor(*ASTConstructor) (interface{}, error)
+    VisitIf(*ASTIf) (interface{}, error)
+    VisitMethod(*ASTMethod) (interface{}, error)
+    VisitFunction(*ASTFunction) (interface{}, error)
+    VisitLet(*ASTLet) (interface{}, error)
+    VisitDo(*ASTDo) (interface{}, error)
+    VisitReturn(*ASTReturn) (interface{}, error)
+    VisitStatic(*ASTStatic) (interface{}, error)
+    VisitField(*ASTField) (interface{}, error)
+}
+
 type ASTNode interface {
     Kind() Kind
     ToSExpression() string
+    Visit(ASTVisitor) (interface{}, error)
 }
 
 type ASTClass struct {
@@ -86,6 +115,10 @@ type ASTClass struct {
 
     Name string
     Body []ASTNode
+}
+
+func (ast *ASTClass) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitClass(ast)
 }
 
 func (ast *ASTClass) ToSExpression() string {
@@ -106,6 +139,10 @@ type ASTWhile struct {
     Body *ASTBlock
 }
 
+func (ast *ASTWhile) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitWhile(ast)
+}
+
 func (ast *ASTWhile) ToSExpression() string {
     return fmt.Sprintf("(while %v %v)", ast.Condition.ToSExpression(), ast.Body.ToSExpression())
 }
@@ -119,6 +156,10 @@ type ASTConstructor struct {
     Name string
     Parameters []*ASTParameter
     Body *ASTBlock
+}
+
+func (ast *ASTConstructor) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitConstructor(ast)
 }
 
 func (ast *ASTConstructor) Kind() Kind {
@@ -150,6 +191,10 @@ type ASTCall struct {
     Arguments []ASTExpression
 }
 
+func (ast *ASTCall) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitCall(ast)
+}
+
 func (ast *ASTCall) Kind() Kind {
     return ASTKindCall
 }
@@ -173,6 +218,10 @@ type ASTString struct {
     Value string
 }
 
+func (ast *ASTString) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitString(ast)
+}
+
 func (ast *ASTString) Kind() Kind {
     return ASTKindString
 }
@@ -182,6 +231,10 @@ func (ast *ASTString) ToSExpression() string {
 }
 
 type ASTNull struct {
+}
+
+func (ast *ASTNull) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitNull(ast)
 }
 
 func (ast *ASTNull) Kind() Kind {
@@ -197,6 +250,10 @@ type ASTIndexExpression struct {
     Index ASTExpression
 }
 
+func (ast *ASTIndexExpression) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitIndexExpression(ast)
+}
+
 func (ast *ASTIndexExpression) ToSExpression() string {
     return fmt.Sprintf("%v[%v]", ast.Left.ToSExpression(), ast.Index.ToSExpression())
 }
@@ -208,6 +265,10 @@ func (ast *ASTIndexExpression) Kind() Kind {
 type ASTMethodCall struct {
     Left ASTExpression
     Call *ASTCall
+}
+
+func (ast *ASTMethodCall) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitMethodCall(ast)
 }
 
 func (ast *ASTMethodCall) ToSExpression() string {
@@ -222,6 +283,10 @@ type ASTNot struct {
     Expression ASTExpression
 }
 
+func (ast *ASTNot) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitNot(ast)
+}
+
 func (ast *ASTNot) ToSExpression() string {
     return fmt.Sprintf("(not %v)", ast.Expression.ToSExpression())
 }
@@ -234,6 +299,10 @@ type ASTNegation struct {
     Expression ASTExpression
 }
 
+func (ast *ASTNegation) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitNegation(ast)
+}
+
 func (ast *ASTNegation) ToSExpression() string {
     return fmt.Sprintf("(- %v)", ast.Expression.ToSExpression())
 }
@@ -244,6 +313,10 @@ func (ast *ASTNegation) Kind() Kind {
 
 type ASTBoolean struct {
     Value bool
+}
+
+func (ast *ASTBoolean) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitBoolean(ast)
 }
 
 func (ast *ASTBoolean) ToSExpression() string {
@@ -273,6 +346,10 @@ type ASTIf struct {
     Else *ASTBlock
 }
 
+func (ast *ASTIf) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitIf(ast)
+}
+
 func (ast *ASTIf) ToSExpression() string {
     var builder strings.Builder
 
@@ -297,6 +374,10 @@ type ASTOperator struct {
     Right ASTExpression
 }
 
+func (ast *ASTOperator) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitOperator(ast)
+}
+
 func (ast *ASTOperator) ToSExpression() string {
     return fmt.Sprintf("(%v %v %v)", ast.Operator.Name(), ast.Left.ToSExpression(), ast.Right.ToSExpression())
 }
@@ -306,6 +387,10 @@ func (ast *ASTOperator) Kind() Kind {
 }
 
 type ASTThis struct {
+}
+
+func (ast *ASTThis) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitThis(ast)
 }
 
 func (ast *ASTThis) ToSExpression() string {
@@ -320,6 +405,10 @@ type ASTConstant struct {
     Number string
 }
 
+func (ast *ASTConstant) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitConstant(ast)
+}
+
 func (ast *ASTConstant) ToSExpression() string {
     return ast.Number
 }
@@ -330,6 +419,10 @@ func (ast *ASTConstant) Kind() Kind {
 
 type ASTReference struct {
     Name string
+}
+
+func (ast *ASTReference) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitReference(ast)
 }
 
 func (ast *ASTReference) ToSExpression() string {
@@ -345,6 +438,10 @@ type ASTMethod struct {
     Name string
     Parameters []*ASTParameter
     Body *ASTBlock
+}
+
+func (ast *ASTMethod) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitMethod(ast)
 }
 
 func (ast *ASTMethod) Kind() Kind {
@@ -374,6 +471,10 @@ type ASTFunction struct {
     Name string
     Parameters []*ASTParameter
     Body *ASTBlock
+}
+
+func (ast *ASTFunction) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitFunction(ast)
 }
 
 func (ast *ASTFunction) ToSExpression() string {
@@ -436,6 +537,10 @@ type ASTVar struct {
     Names []string
 }
 
+func (ast *ASTVar) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitVar(ast)
+}
+
 func (ast *ASTVar) ToSExpression() string {
     var builder strings.Builder
     builder.WriteString("(var ")
@@ -462,6 +567,10 @@ type ASTLet struct {
     Expression ASTExpression
 }
 
+func (ast *ASTLet) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitLet(ast)
+}
+
 func (ast *ASTLet) ToSExpression() string {
     var part strings.Builder
     part.WriteString(ast.Name)
@@ -481,6 +590,10 @@ type ASTDo struct {
     Expression ASTExpression
 }
 
+func (ast *ASTDo) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitDo(ast)
+}
+
 func (ast *ASTDo) ToSExpression() string {
     return fmt.Sprintf("(do %v)", fmt.Sprintf(ast.Expression.ToSExpression()))
 }
@@ -491,6 +604,10 @@ func (ast *ASTDo) Kind() Kind {
 
 type ASTReturn struct {
     Expression ASTExpression
+}
+
+func (ast *ASTReturn) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitReturn(ast)
 }
 
 func (ast *ASTReturn) ToSExpression() string {
@@ -515,6 +632,10 @@ type ASTStatic struct {
     Names []*ASTIdentifier
 }
 
+func (ast *ASTStatic) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitStatic(ast)
+}
+
 func (ast *ASTStatic) ToSExpression() string {
     var builder strings.Builder
 
@@ -537,6 +658,10 @@ type ASTIdentifier struct {
     Name string
 }
 
+func (ast *ASTIdentifier) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitIdentifier(ast)
+}
+
 func (ast *ASTIdentifier) Kind() Kind {
     return ASTKindIdentifier
 }
@@ -548,6 +673,10 @@ func (ast *ASTIdentifier) ToSExpression() string {
 type ASTField struct {
     Type *ASTType
     Names []string
+}
+
+func (ast *ASTField) Visit(visitor ASTVisitor) (interface{}, error) {
+    return visitor.VisitField(ast)
 }
 
 func (ast *ASTField) ToSExpression() string {
