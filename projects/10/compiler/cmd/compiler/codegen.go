@@ -83,7 +83,13 @@ func (function *FunctionGenerator) VisitConstructor(ast *ASTConstructor) (interf
 }
 
 func (function *FunctionGenerator) VisitDo(ast *ASTDo) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: do unimplemented")
+    _, err := ast.Expression.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    function.CodeGenerator.Emit <- "pop temp 0"
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitField(ast *ASTField) (interface{}, error) {
@@ -235,6 +241,7 @@ func (function *FunctionGenerator) VisitWhile(ast *ASTWhile) (interface{}, error
 
 func (function *FunctionGenerator) VisitString(ast *ASTString) (interface{}, error) {
     emitter := function.CodeGenerator.Emit
+    emitter <- fmt.Sprintf("push constant %v", len(ast.Value))
     emitter <- "call String.new 1"
     for _, char_ := range ast.Value {
         emitter <- fmt.Sprintf("push constant %v", int(char_))
@@ -579,6 +586,7 @@ func GenerateCode(ast ASTNode, writer io.Writer) error {
     classes := make(map[string]bool)
     classes["Keyboard"] = true
     classes["Array"] = true
+    classes["Output"] = true
     generator := CodeGenerator{
         Emit: vmChannel,
         Fields: make(map[string]int),

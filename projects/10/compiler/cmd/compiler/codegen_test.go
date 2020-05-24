@@ -252,3 +252,38 @@ class y {
         test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
     }
 }
+
+func TestDoOutputString(test *testing.T){
+    text := `
+class y {
+    function void main() {
+      do Output.printString("abc");
+      return;
+    }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function y.main 0",
+        "push constant 3",
+        "call String.new 1",
+        "push constant 97",
+        "call String.appendChar 2",
+        "push constant 98",
+        "call String.appendChar 2",
+        "push constant 99",
+        "call String.appendChar 2",
+        "call Output.printString 1",
+        "pop temp 0",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}
