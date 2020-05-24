@@ -3,6 +3,7 @@ package main
 import (
     "fmt"
     "io"
+    "strings"
 )
 
 type Kind uint32
@@ -77,6 +78,7 @@ func (kind Kind) Name() string {
 
 type ASTNode interface {
     Kind() Kind
+    ToSExpression() string
 }
 
 type ASTClass struct {
@@ -86,14 +88,26 @@ type ASTClass struct {
     Body []ASTNode
 }
 
+func (ast *ASTClass) ToSExpression() string {
+    var body strings.Builder
+    for _, line := range ast.Body {
+        body.WriteString(line.ToSExpression())
+        body.WriteByte('\n')
+    }
+    return fmt.Sprintf("(class %v\n%v)", ast.Name, body.String())
+}
+
 func (ast *ASTClass) Kind() Kind {
     return ASTKindClass
 }
 
 type ASTWhile struct {
-    ASTNode
     Condition ASTExpression
     Body *ASTBlock
+}
+
+func (ast *ASTWhile) ToSExpression() string {
+    return fmt.Sprintf("(while %v %v)", ast.Condition.ToSExpression(), ast.Body.ToSExpression())
 }
 
 func (ast *ASTWhile) Kind() Kind {
@@ -101,7 +115,6 @@ func (ast *ASTWhile) Kind() Kind {
 }
 
 type ASTConstructor struct {
-    ASTNode
     Class string
     Name string
     Parameters []*ASTParameter
@@ -112,8 +125,27 @@ func (ast *ASTConstructor) Kind() Kind {
     return ASTKindConstructor
 }
 
+func (ast *ASTConstructor) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(constructor ")
+    builder.WriteString(ast.Class)
+    builder.WriteString(" ")
+    builder.WriteString(ast.Name)
+    builder.WriteString("(")
+    for i, parameter := range ast.Parameters {
+        if i > 0 {
+            builder.WriteByte(' ')
+        }
+        builder.WriteString(parameter.ToSExpression())
+    }
+    builder.WriteString(")")
+    builder.WriteString(ast.Body.ToSExpression())
+
+    return builder.String()
+}
+
 type ASTCall struct {
-    ASTExpression
     Name string
     Arguments []ASTExpression
 }
@@ -122,8 +154,22 @@ func (ast *ASTCall) Kind() Kind {
     return ASTKindCall
 }
 
+func (ast *ASTCall) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(")
+    builder.WriteString(ast.Name)
+    builder.WriteByte(' ')
+    for _, argument := range ast.Arguments {
+        builder.WriteString(argument.ToSExpression())
+        builder.WriteByte(' ')
+    }
+    builder.WriteString(")")
+
+    return builder.String()
+}
+
 type ASTString struct {
-    ASTExpression
     Value string
 }
 
@@ -131,18 +177,28 @@ func (ast *ASTString) Kind() Kind {
     return ASTKindString
 }
 
+func (ast *ASTString) ToSExpression() string {
+    return fmt.Sprintf("\"%v\"", ast.Value)
+}
+
 type ASTNull struct {
-    ASTExpression
 }
 
 func (ast *ASTNull) Kind() Kind {
     return ASTKindNull
 }
 
+func (ast *ASTNull) ToSExpression() string {
+    return "null"
+}
+
 type ASTIndexExpression struct {
-    ASTExpression
     Left ASTExpression
     Index ASTExpression
+}
+
+func (ast *ASTIndexExpression) ToSExpression() string {
+    return fmt.Sprintf("%v[%v]", ast.Left.ToSExpression(), ast.Index.ToSExpression())
 }
 
 func (ast *ASTIndexExpression) Kind() Kind {
@@ -150,9 +206,12 @@ func (ast *ASTIndexExpression) Kind() Kind {
 }
 
 type ASTMethodCall struct {
-    ASTExpression
     Left ASTExpression
     Call *ASTCall
+}
+
+func (ast *ASTMethodCall) ToSExpression() string {
+    return fmt.Sprintf("(call %v %v)", ast.Left.ToSExpression(), ast.Call.ToSExpression())
 }
 
 func (ast *ASTMethodCall) Kind() Kind {
@@ -160,8 +219,11 @@ func (ast *ASTMethodCall) Kind() Kind {
 }
 
 type ASTNot struct {
-    ASTExpression
     Expression ASTExpression
+}
+
+func (ast *ASTNot) ToSExpression() string {
+    return fmt.Sprintf("(not %v)", ast.Expression.ToSExpression())
 }
 
 func (ast *ASTNot) Kind() Kind {
@@ -169,8 +231,11 @@ func (ast *ASTNot) Kind() Kind {
 }
 
 type ASTNegation struct {
-    ASTExpression
     Expression ASTExpression
+}
+
+func (ast *ASTNegation) ToSExpression() string {
+    return fmt.Sprintf("(- %v)", ast.Expression.ToSExpression())
 }
 
 func (ast *ASTNegation) Kind() Kind {
@@ -178,8 +243,11 @@ func (ast *ASTNegation) Kind() Kind {
 }
 
 type ASTBoolean struct {
-    ASTExpression
     Value bool
+}
+
+func (ast *ASTBoolean) ToSExpression() string {
+    return fmt.Sprintf("%v", ast.Value)
 }
 
 func (ast *ASTBoolean) Kind() Kind {
@@ -187,9 +255,12 @@ func (ast *ASTBoolean) Kind() Kind {
 }
 
 type ASTType struct {
-    ASTNode
     /* will either be an int, char, boolean, or identifier */
     Type ASTNode
+}
+
+func (ast *ASTType) ToSExpression() string {
+    return ast.Type.ToSExpression()
 }
 
 func (ast *ASTType) Kind() Kind {
@@ -197,10 +268,23 @@ func (ast *ASTType) Kind() Kind {
 }
 
 type ASTIf struct {
-    ASTNode
     Condition ASTExpression
     Then *ASTBlock
     Else *ASTBlock
+}
+
+func (ast *ASTIf) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(if ")
+    builder.WriteString(ast.Condition.ToSExpression())
+    builder.WriteString(" ")
+    builder.WriteString(ast.Then.ToSExpression())
+    if ast.Else != nil {
+        builder.WriteString(ast.Else.ToSExpression())
+    }
+
+    return builder.String()
 }
 
 func (ast *ASTIf) Kind() Kind {
@@ -208,10 +292,13 @@ func (ast *ASTIf) Kind() Kind {
 }
 
 type ASTOperator struct {
-    ASTExpression
     Operator TokenKind // lame to use TokenKind here
     Left ASTExpression
     Right ASTExpression
+}
+
+func (ast *ASTOperator) ToSExpression() string {
+    return fmt.Sprintf("(%v %v %v)", ast.Operator.Name(), ast.Left.ToSExpression(), ast.Right.ToSExpression())
 }
 
 func (ast *ASTOperator) Kind() Kind {
@@ -219,7 +306,10 @@ func (ast *ASTOperator) Kind() Kind {
 }
 
 type ASTThis struct {
-    ASTExpression
+}
+
+func (ast *ASTThis) ToSExpression() string {
+    return "this"
 }
 
 func (ast *ASTThis) Kind() Kind {
@@ -227,8 +317,11 @@ func (ast *ASTThis) Kind() Kind {
 }
 
 type ASTConstant struct {
-    ASTExpression
     Number string
+}
+
+func (ast *ASTConstant) ToSExpression() string {
+    return ast.Number
 }
 
 func (ast *ASTConstant) Kind() Kind {
@@ -236,8 +329,11 @@ func (ast *ASTConstant) Kind() Kind {
 }
 
 type ASTReference struct {
-    ASTExpression
     Name string
+}
+
+func (ast *ASTReference) ToSExpression() string {
+    return ast.Name
 }
 
 func (ast *ASTReference) Kind() Kind {
@@ -245,7 +341,6 @@ func (ast *ASTReference) Kind() Kind {
 }
 
 type ASTMethod struct {
-    ASTNode
     ReturnType *ASTType
     Name string
     Parameters []*ASTParameter
@@ -256,12 +351,48 @@ func (ast *ASTMethod) Kind() Kind {
     return ASTKindMethod
 }
 
+func (ast *ASTMethod) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(method ")
+    builder.WriteString(ast.Name)
+    builder.WriteString("(")
+    for _, parameter := range ast.Parameters {
+        builder.WriteByte(' ')
+        builder.WriteString(parameter.ToSExpression())
+    }
+    builder.WriteString(") -> ")
+    builder.WriteString(ast.ReturnType.ToSExpression())
+    builder.WriteByte(' ')
+    builder.WriteString(ast.Body.ToSExpression())
+
+    return builder.String()
+}
+
 type ASTFunction struct {
-    ASTNode
     ReturnType *ASTType
     Name string
     Parameters []*ASTParameter
     Body *ASTBlock
+}
+
+func (ast *ASTFunction) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(function ")
+    builder.WriteString(ast.Name)
+
+    builder.WriteString(" (")
+    for _, parameter := range ast.Parameters {
+        builder.WriteString(parameter.ToSExpression())
+        builder.WriteString(" ")
+    }
+    builder.WriteString(") -> ")
+    builder.WriteString(ast.ReturnType.ToSExpression())
+    builder.WriteString(ast.Body.ToSExpression())
+    builder.WriteString(")")
+
+    return builder.String()
 }
 
 func (ast *ASTFunction) Kind() Kind {
@@ -269,7 +400,6 @@ func (ast *ASTFunction) Kind() Kind {
 }
 
 type ASTParameter struct {
-    ASTNode
     Type *ASTType
     Name string
 }
@@ -278,9 +408,23 @@ func (ast *ASTParameter) Kind() Kind {
     return ASTKindParameter
 }
 
+func (ast *ASTParameter) ToSExpression() string {
+    return fmt.Sprintf("(%v %v)", ast.Name, ast.Type.ToSExpression())
+}
+
 type ASTBlock struct {
-    ASTNode
     Statements []ASTNode
+}
+
+func (ast *ASTBlock) ToSExpression() string {
+    var builder strings.Builder
+    builder.WriteString("(block\n")
+    for _, statement := range ast.Statements {
+        builder.WriteString(statement.ToSExpression())
+        builder.WriteByte('\n')
+    }
+    builder.WriteString(")")
+    return builder.String()
 }
 
 func (ast *ASTBlock) Kind() Kind {
@@ -288,9 +432,20 @@ func (ast *ASTBlock) Kind() Kind {
 }
 
 type ASTVar struct {
-    ASTNode
     Type *ASTType
     Names []string
+}
+
+func (ast *ASTVar) ToSExpression() string {
+    var builder strings.Builder
+    builder.WriteString("(var ")
+    builder.WriteString(ast.Type.ToSExpression())
+    for _, name := range ast.Names {
+        builder.WriteByte(' ')
+        builder.WriteString(name)
+    }
+    builder.WriteString(")")
+    return builder.String()
 }
 
 func (ast *ASTVar) Kind() Kind {
@@ -302,11 +457,20 @@ type ASTExpression interface {
 }
 
 type ASTLet struct {
-    ASTNode
-
     Name string
     ArrayIndex ASTExpression
     Expression ASTExpression
+}
+
+func (ast *ASTLet) ToSExpression() string {
+    var part strings.Builder
+    part.WriteString(ast.Name)
+    if ast.ArrayIndex != nil {
+        part.WriteString("[")
+        part.WriteString(ast.ArrayIndex.ToSExpression())
+        part.WriteString("]")
+    }
+    return fmt.Sprintf("(let %v = %v)", part.String(), ast.Expression.ToSExpression())
 }
 
 func (ast *ASTLet) Kind() Kind {
@@ -314,8 +478,11 @@ func (ast *ASTLet) Kind() Kind {
 }
 
 type ASTDo struct {
-    ASTNode
     Expression ASTExpression
+}
+
+func (ast *ASTDo) ToSExpression() string {
+    return fmt.Sprintf("(do %v)", fmt.Sprintf(ast.Expression.ToSExpression()))
 }
 
 func (ast *ASTDo) Kind() Kind {
@@ -323,8 +490,20 @@ func (ast *ASTDo) Kind() Kind {
 }
 
 type ASTReturn struct {
-    ASTNode
     Expression ASTExpression
+}
+
+func (ast *ASTReturn) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(return")
+    if ast.Expression != nil {
+        builder.WriteByte(' ')
+        builder.WriteString(ast.Expression.ToSExpression())
+    }
+    builder.WriteString(")")
+
+    return builder.String()
 }
 
 func (ast *ASTReturn) Kind() Kind {
@@ -332,9 +511,22 @@ func (ast *ASTReturn) Kind() Kind {
 }
 
 type ASTStatic struct {
-    ASTNode
     Type *ASTType
     Names []*ASTIdentifier
+}
+
+func (ast *ASTStatic) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(static ")
+    builder.WriteString(ast.Type.ToSExpression())
+    for _, name := range ast.Names {
+        builder.WriteByte(' ')
+        builder.WriteString(name.ToSExpression())
+    }
+    builder.WriteString(")")
+
+    return builder.String()
 }
 
 func (ast *ASTStatic) Kind() Kind {
@@ -342,7 +534,6 @@ func (ast *ASTStatic) Kind() Kind {
 }
 
 type ASTIdentifier struct {
-    ASTNode
     Name string
 }
 
@@ -350,10 +541,27 @@ func (ast *ASTIdentifier) Kind() Kind {
     return ASTKindIdentifier
 }
 
+func (ast *ASTIdentifier) ToSExpression() string {
+    return ast.Name
+}
+
 type ASTField struct {
-    ASTNode
     Type *ASTType
-    Name []string
+    Names []string
+}
+
+func (ast *ASTField) ToSExpression() string {
+    var builder strings.Builder
+
+    builder.WriteString("(field ")
+    builder.WriteString(ast.Type.ToSExpression())
+    for _, name := range ast.Names {
+        builder.WriteByte(' ')
+        builder.WriteString(name)
+    }
+    builder.WriteString(")")
+
+    return builder.String()
 }
 
 func (ast *ASTField) Kind() Kind {
@@ -607,7 +815,7 @@ func parseFieldDeclaration(tokens *TokenStream) (*ASTField, error) {
 
     return &ASTField{
         Type: typeNode,
-        Name: names,
+        Names: names,
     }, nil
 }
 

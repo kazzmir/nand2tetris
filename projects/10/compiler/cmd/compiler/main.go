@@ -61,6 +61,8 @@ func compile(path string) error {
 
     fmt.Printf("Parsed %v in %v\n", path, end.Sub(start))
 
+    fmt.Printf("%v\n", ast.ToSExpression())
+
     _ = ast
 
     return nil
