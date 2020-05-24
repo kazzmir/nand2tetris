@@ -60,8 +60,12 @@ func (function *FunctionGenerator) GetLocal(name string) int {
 }
 
 func (function *FunctionGenerator) VisitBoolean(ast *ASTBoolean) (interface{}, error) {
-    /* FIXME */
-    function.CodeGenerator.Emit <- "push false"
+    if ast.Value {
+        function.CodeGenerator.Emit <- "push constant 0"
+        function.CodeGenerator.Emit <- "not"
+    } else {
+        function.CodeGenerator.Emit <- "push constant 0"
+    }
     return nil, nil
 }
 
@@ -142,7 +146,8 @@ func (function *FunctionGenerator) VisitNot(ast *ASTNot) (interface{}, error) {
 }
 
 func (function *FunctionGenerator) VisitNull(ast *ASTNull) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: null unimplemented")
+    function.CodeGenerator.Emit <- "push constant 0"
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitOperator(ast *ASTOperator) (interface{}, error) {

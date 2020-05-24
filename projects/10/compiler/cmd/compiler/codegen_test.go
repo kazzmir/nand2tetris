@@ -340,3 +340,39 @@ class y {
         test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
     }
 }
+
+func TestBool(test *testing.T){
+    text := `
+class y {
+    function void main() {
+        var String a;
+        var boolean b;
+        let a = null;
+        let b = true;
+        let b = false;
+        return;
+    }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function y.main 2",
+        "push constant 0",
+        "pop local 0",
+        "push constant 0",
+        "not",
+        "pop local 1",
+        "push constant 0",
+        "pop local 1",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}
