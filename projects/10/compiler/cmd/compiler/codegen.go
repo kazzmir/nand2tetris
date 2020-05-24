@@ -21,6 +21,7 @@ type FunctionGenerator struct {
     Parameters map[string]VariableMapping
     ParameterCount int
     gensym int
+    Preamble []string
 }
 
 func (function *FunctionGenerator) Gensym(name string) string {
@@ -296,7 +297,8 @@ func (function *FunctionGenerator) VisitStatic(ast *ASTStatic) (interface{}, err
 }
 
 func (function *FunctionGenerator) VisitThis(ast *ASTThis) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: this unimplemented")
+    function.CodeGenerator.Emit <- "push pointer 0"
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitVar(ast *ASTVar) (interface{}, error) {
@@ -430,6 +432,9 @@ func (function *FunctionGenerator) VisitLet(ast *ASTLet) (interface{}, error) {
     } else if function.IsLocal(ast.Name) {
         function.CodeGenerator.Emit <- fmt.Sprintf("pop local %v", function.GetLocal(ast.Name))
         return nil, nil
+    } else if function.CodeGenerator.IsField(ast.Name) {
+        function.CodeGenerator.Emit <- fmt.Sprintf("pop this %v", function.CodeGenerator.GetField(ast.Name))
+        return nil, nil
     } else if function.CodeGenerator.IsStatic(ast.Name) {
         function.CodeGenerator.Emit <- fmt.Sprintf("pop static %v", function.CodeGenerator.GetStatic(ast.Name))
         return nil, nil
@@ -488,6 +493,10 @@ func (function *FunctionGenerator) processFunctionOrMethod(ast ASTNode) (interfa
 
     function.CodeGenerator.Emit = savedEmit
     function.CodeGenerator.Emit <- fmt.Sprintf("function %v.%v %v", function.CodeGenerator.ClassName, name, function.LocalCount)
+
+    for _, line := range function.Preamble {
+        function.CodeGenerator.Emit <- line
+    }
 
     if isMethod {
         /* set up the 'this' register */
@@ -611,6 +620,16 @@ func (generator *CodeGenerator) VisitClass(ast *ASTClass) (interface{}, error) {
             continue
         }
 
+        constructor, ok := body.(*ASTConstructor)
+        if ok {
+            _, err := constructor.Visit(generator)
+            if err != nil {
+                return nil, err
+            }
+
+            continue
+        }
+
         _, ok = body.(*ASTField)
         if ok {
             continue
@@ -677,7 +696,7 @@ func (generator *CodeGenerator) VisitThis(*ASTThis) (interface{}, error) {
 }
 
 func (generator *CodeGenerator) VisitConstant(*ASTConstant) (interface{}, error) {
-    return nil, fmt.Errorf("unimplemented constant")
+    return nil, fmt.Errorf("code generator: constant should not be visited")
 }
 
 func (generator *CodeGenerator) VisitReference(*ASTReference) (interface{}, error) {
@@ -688,8 +707,34 @@ func (generator *CodeGenerator) VisitWhile(*ASTWhile) (interface{}, error) {
     return nil, fmt.Errorf("unimplemented while")
 }
 
-func (generator *CodeGenerator) VisitConstructor(*ASTConstructor) (interface{}, error) {
-    return nil, fmt.Errorf("unimplemented constructor")
+func (generator *CodeGenerator) VisitConstructor(ast *ASTConstructor) (interface{}, error) {
+    if ast.Class != generator.ClassName {
+        return nil, fmt.Errorf("class name does not match the constructor: class=%v constructor=%v", generator.ClassName, ast.Class)
+    }
+
+    classSize := generator.FieldCount
+
+    function := FunctionGenerator{
+        CodeGenerator: generator,
+        LocalVariables: make(map[string]VariableMapping),
+        Parameters: make(map[string]VariableMapping),
+        ParameterCount: 1,
+        Preamble: []string{
+            fmt.Sprintf("push constant %v", classSize),
+            "call Memory.alloc 1",
+            "pop pointer 0",
+        },
+    }
+
+    /* compile constructor body as if it was a function */
+    method := &ASTFunction{
+        ReturnType: &ASTType{Type: &ASTIdentifier{Name: ast.Class}},
+        Name: "new",
+        Parameters: ast.Parameters,
+        Body: ast.Body,
+    }
+
+    return method.Visit(&function)
 }
 
 func (generator *CodeGenerator) VisitIf(*ASTIf) (interface{}, error) {

@@ -498,3 +498,38 @@ class y {
         test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
     }
 }
+
+func TestConstructor(test *testing.T){
+    text := `
+class p {
+    field int a, b;
+
+    constructor p new(){
+      let a = 2;
+      let b = 3;
+      return this;
+    }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function p.new 0",
+        "push constant 2",
+        "call Memory.alloc 1",
+        "pop pointer 0",
+        "push constant 2",
+        "pop this 0",
+        "push constant 3",
+        "pop this 1",
+        "push pointer 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}
