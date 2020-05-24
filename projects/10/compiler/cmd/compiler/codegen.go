@@ -116,7 +116,21 @@ func (function *FunctionGenerator) VisitIf(ast *ASTIf) (interface{}, error) {
 }
 
 func (function *FunctionGenerator) VisitIndexExpression(ast *ASTIndexExpression) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: index expression unimplemented")
+    _, err := ast.Left.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    _, err = ast.Index.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    function.CodeGenerator.Emit <- "add"
+    function.CodeGenerator.Emit <- "pop pointer 1"
+    function.CodeGenerator.Emit <- "push that 0"
+
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitNegation(ast *ASTNegation) (interface{}, error) {
@@ -151,6 +165,9 @@ func (function *FunctionGenerator) VisitOperator(ast *ASTOperator) (interface{},
         return nil, nil
     case TokenDivision:
         function.CodeGenerator.Emit <- "call Math.divide 2"
+        return nil, nil
+    case TokenMultiply:
+        function.CodeGenerator.Emit <- "call Math.multiply 2"
         return nil, nil
     case TokenLessThan:
         function.CodeGenerator.Emit <- "lt"
@@ -230,7 +247,7 @@ func (function *FunctionGenerator) VisitWhile(ast *ASTWhile) (interface{}, error
 
     _, err = ast.Body.Visit(function)
     if err != nil {
-        return nil, nil
+        return nil, err
     }
 
     emitter <- fmt.Sprintf("goto %v", labelStart)
@@ -287,10 +304,26 @@ func (function *FunctionGenerator) VisitLet(ast *ASTLet) (interface{}, error) {
     }
 
     if ast.ArrayIndex != nil {
-        return nil, fmt.Errorf("let: array index unimplemented")
-    }
+        /* compute the array offset */
+        reference := &ASTReference{Name: ast.Name}
+        _, err := reference.Visit(function)
+        if err != nil {
+            return nil, err
+        }
 
-    if function.IsLocal(ast.Name) {
+        _, err = ast.ArrayIndex.Visit(function)
+        if err != nil {
+            return nil, err
+        }
+
+        function.CodeGenerator.Emit <- "add"
+        /* set up 'that' register */
+        function.CodeGenerator.Emit <- "pop pointer 1"
+        /* assign 'that' */
+        function.CodeGenerator.Emit <- "pop that 0"
+
+        return nil, nil
+    } else if function.IsLocal(ast.Name) {
         function.CodeGenerator.Emit <- fmt.Sprintf("pop local %v", function.GetLocal(ast.Name))
         return nil, nil
     }
