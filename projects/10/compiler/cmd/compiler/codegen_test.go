@@ -119,6 +119,46 @@ class x {
     }
 }
 
+func TestMethodCallSelf(test *testing.T){
+    text := `
+class p {
+    method int foo(int a){
+        return a;
+    }
+
+    method void bar(){
+        do foo(2);
+        return;
+    }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function p.foo 0",
+        "push argument 0",
+        "pop pointer 0",
+        "push argument 1",
+        "return",
+        "function p.bar 0",
+        "push argument 0",
+        "pop pointer 0",
+        "push pointer 0",
+        "push constant 2",
+        "call p.foo 2",
+        "pop temp 0",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}
+
 func TestSimpleMath(test *testing.T){
     text := `
 class x {

@@ -85,7 +85,24 @@ func (function *FunctionGenerator) VisitBoolean(ast *ASTBoolean) (interface{}, e
 }
 
 func (function *FunctionGenerator) VisitCall(ast *ASTCall) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: call unimplemented")
+    this := &ASTThis{}
+    _, err := this.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    name := fmt.Sprintf("%v.%v", function.CodeGenerator.ClassName, ast.Name)
+
+    for _, argument := range ast.Arguments {
+        _, err := argument.Visit(function)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    function.CodeGenerator.Emit <- fmt.Sprintf("call %v %v", name, len(ast.Arguments) + 1)
+
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitClass(ast *ASTClass) (interface{}, error) {
@@ -208,7 +225,13 @@ func (function *FunctionGenerator) VisitNegation(ast *ASTNegation) (interface{},
 }
 
 func (function *FunctionGenerator) VisitNot(ast *ASTNot) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: not unimplemented")
+    _, err := ast.Expression.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+    function.CodeGenerator.Emit <- "not"
+
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitNull(ast *ASTNull) (interface{}, error) {
@@ -231,6 +254,9 @@ func (function *FunctionGenerator) VisitOperator(ast *ASTOperator) (interface{},
     case TokenPlus:
         function.CodeGenerator.Emit <- "add"
         return nil, nil
+    case TokenEquals:
+        function.CodeGenerator.Emit <- "eq"
+        return nil, nil
     case TokenNegation:
         function.CodeGenerator.Emit <- "sub"
         return nil, nil
@@ -248,6 +274,9 @@ func (function *FunctionGenerator) VisitOperator(ast *ASTOperator) (interface{},
         return nil, nil
     case TokenOr:
         function.CodeGenerator.Emit <- "or"
+        return nil, nil
+    case TokenAnd:
+        function.CodeGenerator.Emit <- "and"
         return nil, nil
     }
 
@@ -356,6 +385,11 @@ func (function *FunctionGenerator) VisitString(ast *ASTString) (interface{}, err
 func (function *FunctionGenerator) GetType(ast *ASTReference) (string, error) {
     if function.IsLocal(ast.Name) {
         mapping := function.LocalVariables[ast.Name]
+        return mapping.Type, nil
+    }
+
+    if function.CodeGenerator.IsField(ast.Name) {
+        mapping := function.CodeGenerator.Fields[ast.Name]
         return mapping.Type, nil
     }
 
@@ -524,10 +558,10 @@ type CodeGenerator struct {
     ClassName string
     Classes map[string]bool
 
-    Fields map[string]int
+    Fields map[string]VariableMapping
     FieldCount int
 
-    Statics map[string]int
+    Statics map[string]VariableMapping
     StaticCount int
 }
 
@@ -540,8 +574,11 @@ func (generator *CodeGenerator) IsClass(name string) bool {
     return ok
 }
 
-func (generator *CodeGenerator) RegisterStatic(name string){
-    generator.Statics[name] = generator.StaticCount
+func (generator *CodeGenerator) RegisterStatic(name string, type_ string){
+    generator.Statics[name] = VariableMapping{
+        Slot: generator.StaticCount,
+        Type: type_,
+    }
     generator.StaticCount += 1
 }
 
@@ -555,11 +592,14 @@ func (generator *CodeGenerator) GetStatic(name string) int {
     if !ok {
         return -1
     }
-    return value
+    return value.Slot
 }
 
-func (generator *CodeGenerator) RegisterField(name string){
-    generator.Fields[name] = generator.FieldCount
+func (generator *CodeGenerator) RegisterField(name string, type_ string){
+    generator.Fields[name] = VariableMapping{
+        Slot: generator.FieldCount,
+        Type: type_,
+    }
     generator.FieldCount += 1
 }
 
@@ -574,7 +614,7 @@ func (generator *CodeGenerator) GetField(name string) int {
         return -1
     }
 
-    return index
+    return index.Slot
 }
 
 func (generator *CodeGenerator) VisitClass(ast *ASTClass) (interface{}, error) {
@@ -779,17 +819,26 @@ func (generator *CodeGenerator) VisitReturn(*ASTReturn) (interface{}, error) {
 }
 
 func (generator *CodeGenerator) VisitStatic(ast *ASTStatic) (interface{}, error) {
+    type_, ok := ast.Type.Type.(*ASTIdentifier)
+    if !ok {
+        return nil, fmt.Errorf("unknown type node %v", ast.Type.ToSExpression())
+    }
+
     for _, name := range ast.Names {
-        generator.RegisterStatic(name.Name)
+        generator.RegisterStatic(name.Name, type_.Name)
     }
 
     return nil, nil
 }
 
 func (generator *CodeGenerator) VisitField(ast *ASTField) (interface{}, error) {
+    type_, ok := ast.Type.Type.(*ASTIdentifier)
+    if !ok {
+        return nil, fmt.Errorf("unknown type node %v", ast.Type.ToSExpression())
+    }
 
     for _, name := range ast.Names {
-        generator.RegisterField(name)
+        generator.RegisterField(name, type_.Name)
     }
 
     return nil, nil
@@ -803,8 +852,8 @@ func GenerateCode(ast ASTNode, writer io.Writer) error {
     classes["Output"] = true
     generator := CodeGenerator{
         Emit: vmChannel,
-        Fields: make(map[string]int),
-        Statics: make(map[string]int),
+        Fields: make(map[string]VariableMapping),
+        Statics: make(map[string]VariableMapping),
         Classes: classes,
     }
     var codegenError error
