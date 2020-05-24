@@ -1389,6 +1389,9 @@ func parseReturn(tokens *TokenStream) (*ASTReturn, error) {
         if err != nil {
             return nil, err
         }
+    } else {
+        /* always return some value */
+        expression = &ASTConstant{Number: "0"}
     }
 
     err = consumeToken(tokens, TokenSemicolon)

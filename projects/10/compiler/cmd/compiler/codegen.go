@@ -46,7 +46,7 @@ func (function *FunctionGenerator) VisitClass(ast *ASTClass) (interface{}, error
 }
 
 func (function *FunctionGenerator) VisitConstant(ast *ASTConstant) (interface{}, error) {
-    function.CodeGenerator.Emit <- fmt.Sprintf("push %v", ast.Number)
+    function.CodeGenerator.Emit <- fmt.Sprintf("push constant %v", ast.Number)
     return nil, nil
 }
 
@@ -105,7 +105,7 @@ func (function *FunctionGenerator) VisitReference(ast *ASTReference) (interface{
     emitter := function.CodeGenerator.Emit
 
     if function.IsLocal(ast.Name) {
-        emitter <- fmt.Sprintf("pop local %v", function.GetLocal(ast.Name))
+        emitter <- fmt.Sprintf("push local %v", function.GetLocal(ast.Name))
         return nil, nil
     }
 
@@ -184,7 +184,7 @@ func (function *FunctionGenerator) VisitLet(ast *ASTLet) (interface{}, error) {
     }
 
     if function.IsLocal(ast.Name) {
-        function.CodeGenerator.Emit <- fmt.Sprintf("push local %v", function.GetLocal(ast.Name))
+        function.CodeGenerator.Emit <- fmt.Sprintf("pop local %v", function.GetLocal(ast.Name))
         return nil, nil
     }
 
@@ -192,15 +192,34 @@ func (function *FunctionGenerator) VisitLet(ast *ASTLet) (interface{}, error) {
 }
 
 func (function *FunctionGenerator) VisitFunction(ast *ASTFunction) (interface{}, error) {
-    function.CodeGenerator.Emit <- fmt.Sprintf("function %v.%v %v", function.CodeGenerator.ClassName, ast.Name, len(ast.Parameters))
+    localEmitter := make(chan string, 10)
+    savedEmit := function.CodeGenerator.Emit
+    function.CodeGenerator.Emit = localEmitter
 
-    _, err := ast.Body.Visit(function)
-    if err != nil {
-        return nil, err
+    /* Have to process the body first to find out how many locals there are */
+    var functionError error
+    go func(){
+        defer close(localEmitter)
+        _, functionError = ast.Body.Visit(function)
+    }()
+
+    var code []string
+
+    for line := range localEmitter {
+        code = append(code, line)
+    }
+
+    if functionError != nil {
+        return nil, functionError
+    }
+
+    function.CodeGenerator.Emit = savedEmit
+    function.CodeGenerator.Emit <- fmt.Sprintf("function %v.%v %v", function.CodeGenerator.ClassName, ast.Name, function.LocalCount)
+    for _, line := range code {
+        function.CodeGenerator.Emit <- line
     }
 
     return nil, nil
-
 }
 
 func (function *FunctionGenerator) VisitMethod(ast *ASTMethod) (interface{}, error) {
@@ -289,9 +308,7 @@ func (generator *CodeGenerator) VisitConstant(*ASTConstant) (interface{}, error)
 }
 
 func (generator *CodeGenerator) VisitReference(*ASTReference) (interface{}, error) {
-    /* FIXME */
-    generator.Emit <- "pop local 0"
-    return nil, nil
+    return nil, fmt.Errorf("code generator: reference should not be visited")
 }
 
 func (generator *CodeGenerator) VisitWhile(*ASTWhile) (interface{}, error) {
