@@ -75,10 +75,15 @@ func compile(path string) error {
     buffer := bufio.NewWriter(output)
     defer buffer.Flush()
 
+    start = time.Now()
+
     err = GenerateCode(ast, buffer)
     if err != nil {
         return err
     }
+
+    end = time.Now()
+    fmt.Printf("Codegen %v in %v\n", path, end.Sub(start))
 
     return nil
 }
