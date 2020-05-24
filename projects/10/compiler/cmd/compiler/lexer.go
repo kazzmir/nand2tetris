@@ -168,7 +168,6 @@ func (token *Token) String() string {
 }
 
 type WhiteSpaceMachine struct {
-    LexerStateMachine
     stopped bool
 }
 
@@ -201,7 +200,6 @@ func (space *WhiteSpaceMachine) Token(line uint64, start uint64, end uint64) (To
 }
 
 type LiteralMachine struct {
-    LexerStateMachine
     Literal string
     Kind TokenKind
 
@@ -256,8 +254,6 @@ func buildLiteralMachine(literal string, kind TokenKind) LexerStateMachine {
 }
 
 type IdentifierMachine struct {
-    LexerStateMachine
-
     Name bytes.Buffer
     stopped bool
 }
@@ -304,7 +300,6 @@ func (identifier *IdentifierMachine) Token(line uint64, start uint64, end uint64
 }
 
 type NumberMachine struct {
-    LexerStateMachine
     Number bytes.Buffer
     stopped bool
 }
@@ -344,7 +339,6 @@ func (machine *NumberMachine) Token(line uint64, start uint64, end uint64) (Toke
 }
 
 type SingleCommentMachine struct {
-    LexerStateMachine
     Slashes int
     Newline bool
     stopped bool
@@ -399,7 +393,6 @@ func (machine *SingleCommentMachine) Reset() {
 }
 
 type BlockCommentMachine struct {
-    LexerStateMachine
     OpenComment int // will be 1 if only '/' is seen, and 2 if '/*' is seen
     CloseComment int // will be 1 if only '*' is seen, and 2 if '*/' is seen
     stopped bool
@@ -465,7 +458,6 @@ func (machine *BlockCommentMachine) Token(line uint64, start uint64, end uint64)
 }
 
 type StringMachine struct {
-    LexerStateMachine
     Quote int // 1 for the starting quote, 2 for the ending quote
     Text bytes.Buffer // actual string contents
     stopped bool
