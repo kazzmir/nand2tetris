@@ -12,6 +12,13 @@ type FunctionGenerator struct {
     LocalCount int
     Parameters map[string]int
     ParameterCount int
+    gensym int
+}
+
+func (function *FunctionGenerator) Gensym(name string) string {
+    out := fmt.Sprintf("%v_%v", name, function.gensym)
+    function.gensym += 1
+    return out
 }
 
 func (function *FunctionGenerator) RegisterParameter(name string){
@@ -139,6 +146,12 @@ func (function *FunctionGenerator) VisitOperator(ast *ASTOperator) (interface{},
     case TokenDivision:
         function.CodeGenerator.Emit <- "call Math.divide 2"
         return nil, nil
+    case TokenLessThan:
+        function.CodeGenerator.Emit <- "lt"
+        return nil, nil
+    case TokenGreaterThan:
+        function.CodeGenerator.Emit <- "gt"
+        return nil, nil
     }
 
     return nil, fmt.Errorf("function generator: unknown operator %v", ast.Operator.Name())
@@ -195,7 +208,29 @@ func (function *FunctionGenerator) VisitVar(ast *ASTVar) (interface{}, error) {
 }
 
 func (function *FunctionGenerator) VisitWhile(ast *ASTWhile) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: while unimplemented")
+    labelStart := function.Gensym("while_start")
+    labelEnd := function.Gensym("while_end")
+
+    emitter := function.CodeGenerator.Emit
+    emitter <- fmt.Sprintf("label %v", labelStart)
+
+    _, err := ast.Condition.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    emitter <- "not"
+    emitter <- fmt.Sprintf("if-goto %v", labelEnd)
+
+    _, err = ast.Body.Visit(function)
+    if err != nil {
+        return nil, nil
+    }
+
+    emitter <- fmt.Sprintf("goto %v", labelStart)
+    emitter <- fmt.Sprintf("label %v", labelEnd)
+
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitString(ast *ASTString) (interface{}, error) {
@@ -215,7 +250,7 @@ func (function *FunctionGenerator) VisitMethodCall(ast *ASTMethodCall) (interfac
     reference, ok := ast.Left.(*ASTReference)
     if ok {
         /* could be a local variable */
-        if reference.Name == function.CodeGenerator.ClassName {
+        if function.CodeGenerator.IsClass(reference.Name) {
             name = fmt.Sprintf("%v.%v", reference.Name, ast.Call.Name)
         } else {
             return nil, fmt.Errorf("unhandled method call for %v", ast.ToSExpression())
@@ -327,9 +362,19 @@ func (function *FunctionGenerator) VisitMethod(ast *ASTMethod) (interface{}, err
 type CodeGenerator struct {
     Emit chan(string)
     ClassName string
+    Classes map[string]bool
 
     Fields map[string]int
     FieldCount int
+}
+
+func (generator *CodeGenerator) RegisterClass(name string){
+    generator.Classes[name] = true
+}
+
+func (generator *CodeGenerator) IsClass(name string) bool {
+    _, ok := generator.Classes[name]
+    return ok
 }
 
 func (generator *CodeGenerator) RegisterField(name string){
@@ -352,6 +397,7 @@ func (generator *CodeGenerator) GetField(name string) int {
 }
 
 func (generator *CodeGenerator) VisitClass(ast *ASTClass) (interface{}, error) {
+    generator.RegisterClass(ast.Name)
     generator.ClassName = ast.Name
 
     for _, body := range ast.Body {
@@ -530,9 +576,13 @@ func (generator *CodeGenerator) VisitField(ast *ASTField) (interface{}, error) {
 
 func GenerateCode(ast ASTNode, writer io.Writer) error {
     vmChannel := make(chan string, 10)
+    classes := make(map[string]bool)
+    classes["Keyboard"] = true
+    classes["Array"] = true
     generator := CodeGenerator{
         Emit: vmChannel,
         Fields: make(map[string]int),
+        Classes: classes,
     }
     var codegenError error
     go func(){

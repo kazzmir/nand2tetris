@@ -206,3 +206,49 @@ class x {
         test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
     }
 }
+
+func TestWhile(test *testing.T){
+    text := `
+class y {
+   function void main() {
+     var int length;
+     var int i;
+     
+     let i = 0;
+     while (i < length) {
+        let i = i + 1;
+     }
+     
+     return;
+   }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function y.main 2",
+        "push constant 0",
+        "pop local 1",
+        "label while_start_0",
+        "push local 1",
+        "push local 0",
+        "lt",
+        "not",
+        "if-goto while_end_1",
+        "push local 1",
+        "push constant 1",
+        "add",
+        "pop local 1",
+        "goto while_start_0",
+        "label while_end_1",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}
