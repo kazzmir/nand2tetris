@@ -410,3 +410,40 @@ class y {
         test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
     }
 }
+
+
+func TestMethodCall(test *testing.T){
+    text := `
+class y {
+    function void main() {
+      var SquareGame game;
+      let game = SquareGame.new();
+      do game.run();
+      do game.dispose();
+      return;
+    }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function y.main 1",
+        "call SquareGame.new 0",
+        "pop local 0",
+        "push local 0",
+        "call SquareGame.run 1",
+        "pop temp 0",
+        "push local 0",
+        "call SquareGame.dispose 1",
+        "pop temp 0",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}

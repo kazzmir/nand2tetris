@@ -5,12 +5,20 @@ import (
     "io"
 )
 
+/* holds the slot in whatever segment this variable lives in
+ * and the type of the variable
+ */
+type VariableMapping struct {
+    Slot int
+    Type string
+}
+
 type FunctionGenerator struct {
     CodeGenerator *CodeGenerator
     /* Map a variable to a local slot */
-    LocalVariables map[string]int
+    LocalVariables map[string]VariableMapping
     LocalCount int
-    Parameters map[string]int
+    Parameters map[string]VariableMapping
     ParameterCount int
     gensym int
 }
@@ -21,8 +29,11 @@ func (function *FunctionGenerator) Gensym(name string) string {
     return out
 }
 
-func (function *FunctionGenerator) RegisterParameter(name string){
-    function.Parameters[name] = function.ParameterCount
+func (function *FunctionGenerator) RegisterParameter(name string, type_ string){
+    function.Parameters[name] = VariableMapping{
+        Slot: function.ParameterCount,
+        Type: type_,
+    }
     function.ParameterCount += 1
 }
 
@@ -32,16 +43,19 @@ func (function *FunctionGenerator) IsParameter(name string) bool {
 }
 
 func (function *FunctionGenerator) GetParameter(name string) int {
-    index, ok := function.Parameters[name]
+    mapping, ok := function.Parameters[name]
     if !ok {
         return -1
     }
 
-    return index
+    return mapping.Slot
 }
 
-func (function *FunctionGenerator) RegisterVariable(name string){
-    function.LocalVariables[name] = function.LocalCount
+func (function *FunctionGenerator) RegisterVariable(name string, type_ string){
+    function.LocalVariables[name] = VariableMapping{
+        Slot: function.LocalCount,
+        Type: type_,
+    }
     function.LocalCount += 1
 }
 
@@ -56,7 +70,7 @@ func (function *FunctionGenerator) GetLocal(name string) int {
         return -1
     }
 
-    return value
+    return value.Slot
 }
 
 func (function *FunctionGenerator) VisitBoolean(ast *ASTBoolean) (interface{}, error) {
@@ -233,8 +247,13 @@ func (function *FunctionGenerator) VisitThis(ast *ASTThis) (interface{}, error) 
 
 func (function *FunctionGenerator) VisitVar(ast *ASTVar) (interface{}, error) {
 
+    type_, ok := ast.Type.Type.(*ASTIdentifier)
+    if !ok {
+        return nil, fmt.Errorf("unknown type node %v", ast.Type.ToSExpression())
+    }
+
     for _, name := range ast.Names {
-        function.RegisterVariable(name)
+        function.RegisterVariable(name, type_.Name)
     }
 
     return nil, nil
@@ -278,16 +297,37 @@ func (function *FunctionGenerator) VisitString(ast *ASTString) (interface{}, err
     return nil, nil
 }
 
+func (function *FunctionGenerator) GetType(ast *ASTReference) (string, error) {
+    if function.IsLocal(ast.Name) {
+        mapping := function.LocalVariables[ast.Name]
+        return mapping.Type, nil
+    }
+
+    return "", fmt.Errorf("unknown reference %v", ast.Name)
+}
+
 func (function *FunctionGenerator) VisitMethodCall(ast *ASTMethodCall) (interface{}, error) {
     var name string
 
+    passThis := 0
     reference, ok := ast.Left.(*ASTReference)
+    /* try to determine if this is a call to a static function or a method call on
+     * a live variable. for a variable call like foo.xyz(), we implicitly pass this as
+     * argument 1, so the number of arguments passed in is 1 + actual arguments, e.g:
+     * foo.xyz(4) -> has 2 arguments: this and the number 4
+     */
     if ok {
-        /* could be a local variable */
-        if function.CodeGenerator.IsClass(reference.Name) {
+        _, err := reference.Visit(function)
+        if err != nil {
+            /* hopefully its some existing type.. */
             name = fmt.Sprintf("%v.%v", reference.Name, ast.Call.Name)
         } else {
-            return nil, fmt.Errorf("unhandled method call for %v", ast.ToSExpression())
+            type_, err := function.GetType(reference)
+            if err != nil {
+                return nil, fmt.Errorf("unknown type for reference %v", reference.Name)
+            }
+            name = fmt.Sprintf("%v.%v", type_, ast.Call.Name)
+            passThis = 1
         }
     } else {
         _, err := ast.Left.Visit(function)
@@ -303,7 +343,7 @@ func (function *FunctionGenerator) VisitMethodCall(ast *ASTMethodCall) (interfac
         }
     }
 
-    function.CodeGenerator.Emit <- fmt.Sprintf("call %v %v", name, len(ast.Call.Arguments))
+    function.CodeGenerator.Emit <- fmt.Sprintf("call %v %v", name, len(ast.Call.Arguments) + passThis)
     return nil, nil
 }
 
@@ -368,7 +408,11 @@ func (function *FunctionGenerator) processFunctionOrMethod(ast ASTNode) (interfa
     }
 
     for _, parameter := range parameters {
-        function.RegisterParameter(parameter.Name)
+        type_, ok := parameter.Type.Type.(*ASTIdentifier)
+        if !ok {
+            return nil, fmt.Errorf("unknown type %v", parameter.Type.ToSExpression())
+        }
+        function.RegisterParameter(parameter.Name, type_.Name)
     }
 
     /* Have to process the body first to find out how many locals there are */
@@ -601,8 +645,8 @@ func (generator *CodeGenerator) VisitIf(*ASTIf) (interface{}, error) {
 func (generator *CodeGenerator) VisitMethod(ast *ASTMethod) (interface{}, error) {
     function := FunctionGenerator{
         CodeGenerator: generator,
-        LocalVariables: make(map[string]int),
-        Parameters: make(map[string]int),
+        LocalVariables: make(map[string]VariableMapping),
+        Parameters: make(map[string]VariableMapping),
         ParameterCount: 1,
     }
 
@@ -616,8 +660,8 @@ func (generator *CodeGenerator) VisitBlock(ast *ASTBlock) (interface{}, error) {
 func (generator *CodeGenerator) VisitFunction(ast *ASTFunction) (interface{}, error) {
     function := FunctionGenerator{
         CodeGenerator: generator,
-        LocalVariables: make(map[string]int),
-        Parameters: make(map[string]int),
+        LocalVariables: make(map[string]VariableMapping),
+        Parameters: make(map[string]VariableMapping),
     }
 
     return ast.Visit(&function)
