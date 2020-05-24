@@ -411,7 +411,6 @@ class y {
     }
 }
 
-
 func TestMethodCall(test *testing.T){
     text := `
 class y {
@@ -439,6 +438,58 @@ class y {
         "push local 0",
         "call SquareGame.dispose 1",
         "pop temp 0",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}
+
+func TestIf(test *testing.T){
+    text := `
+class y {
+    function void test() {
+        var int i;
+        if (false) {
+            let i = 1;
+        } else {
+            let i = 2;
+        }
+
+        if (true) {
+            let i = 3;
+        }
+
+        return;
+    }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function y.test 1",
+        "push constant 0",
+        "not",
+        "if-goto if_else_0",
+        "push constant 1",
+        "pop local 0",
+        "goto if_done_1",
+        "label if_else_0",
+        "push constant 2",
+        "pop local 0",
+        "label if_done_1",
+        "push constant 0",
+        "not",
+        "not",
+        "if-goto if_done_3",
+        "push constant 3",
+        "pop local 0",
+        "label if_done_3",
         "push constant 0",
         "return",
     }

@@ -130,7 +130,52 @@ func (function *FunctionGenerator) VisitIdentifier(ast *ASTIdentifier) (interfac
 }
 
 func (function *FunctionGenerator) VisitIf(ast *ASTIf) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: if unimplemented")
+    /*
+    Condition ASTExpression
+    Then *ASTBlock
+    Else *ASTBlock
+    */
+
+    labelElse := function.Gensym("if_else")
+    labelDone := function.Gensym("if_done")
+
+    /* check if the condition is true or false */
+    _, err := ast.Condition.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    /* negate the condition */
+    function.CodeGenerator.Emit <- "not"
+    if ast.Else != nil {
+        /* condition failed, so jump to else */
+        function.CodeGenerator.Emit <- fmt.Sprintf("if-goto %v", labelElse)
+    } else {
+        /* there is no else block, so skip directly to done */
+        function.CodeGenerator.Emit <- fmt.Sprintf("if-goto %v", labelDone)
+    }
+
+    /* otherwise the condition is true, so fall through here */
+
+    _, err = ast.Then.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    if ast.Else != nil {
+        /* from the then block, skip over the else and go directly to done */
+        function.CodeGenerator.Emit <- fmt.Sprintf("goto %v", labelDone)
+        function.CodeGenerator.Emit <- fmt.Sprintf("label %v", labelElse)
+
+        _, err = ast.Else.Visit(function)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    function.CodeGenerator.Emit <- fmt.Sprintf("label %v", labelDone)
+
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitIndexExpression(ast *ASTIndexExpression) (interface{}, error) {
@@ -152,7 +197,13 @@ func (function *FunctionGenerator) VisitIndexExpression(ast *ASTIndexExpression)
 }
 
 func (function *FunctionGenerator) VisitNegation(ast *ASTNegation) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: negation unimplemented")
+    _, err := ast.Expression.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+    function.CodeGenerator.Emit <- "neg"
+
+    return nil, nil
 }
 
 func (function *FunctionGenerator) VisitNot(ast *ASTNot) (interface{}, error) {
@@ -193,6 +244,9 @@ func (function *FunctionGenerator) VisitOperator(ast *ASTOperator) (interface{},
         return nil, nil
     case TokenGreaterThan:
         function.CodeGenerator.Emit <- "gt"
+        return nil, nil
+    case TokenOr:
+        function.CodeGenerator.Emit <- "or"
         return nil, nil
     }
 
