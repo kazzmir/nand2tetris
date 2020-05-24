@@ -36,7 +36,6 @@ type VMCommand interface {
 }
 
 type PushConstant struct {
-    VMCommand
     Constant uint64
 }
 
@@ -53,7 +52,6 @@ func (constant *PushConstant) TranslateToAssembly(translator *Translator) []stri
 }
 
 type Add struct {
-    VMCommand
 }
 
 func (add *Add) TranslateToAssembly(translator *Translator) []string {
@@ -76,7 +74,6 @@ func (add *Add) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Sub struct {
-    VMCommand
 }
 
 func (sub *Sub) TranslateToAssembly(translator *Translator) []string {
@@ -98,7 +95,6 @@ func (sub *Sub) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Lt struct {
-    VMCommand
 }
 
 func generateComparison(translator *Translator, jumpFalse string) []string {
@@ -153,7 +149,6 @@ func (lt *Lt) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Eq struct {
-    VMCommand
 }
 
 func (eq *Eq) TranslateToAssembly(translator *Translator) []string {
@@ -167,7 +162,6 @@ func (eq *Eq) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Gt struct {
-    VMCommand
 }
 
 func (gt *Gt) TranslateToAssembly(translator *Translator) []string {
@@ -175,7 +169,6 @@ func (gt *Gt) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Neg struct {
-    VMCommand
 }
 
 func (neg *Neg) TranslateToAssembly(translator *Translator) []string {
@@ -189,7 +182,6 @@ func (neg *Neg) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Not struct {
-    VMCommand
 }
 
 func (not *Not) TranslateToAssembly(translator *Translator) []string {
@@ -203,7 +195,6 @@ func (not *Not) TranslateToAssembly(translator *Translator) []string {
 }
 
 type And struct {
-    VMCommand
 }
 
 func (and *And) TranslateToAssembly(translator *Translator) []string {
@@ -220,7 +211,6 @@ func (and *And) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Or struct {
-    VMCommand
 }
 
 func (or *Or) TranslateToAssembly(translator *Translator) []string {
@@ -237,7 +227,6 @@ func (or *Or) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PopLocal struct {
-    VMCommand
     Index int
 }
 
@@ -294,7 +283,6 @@ func (local *PopLocal) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PopArgument struct {
-    VMCommand
     Index int
 }
 
@@ -303,7 +291,6 @@ func (argument *PopArgument) TranslateToAssembly(translator *Translator) []strin
 }
 
 type PopThis struct {
-    VMCommand
     Index int
 }
 
@@ -312,7 +299,6 @@ func (this *PopThis) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PopThat struct {
-    VMCommand
     Index int
 }
 
@@ -321,7 +307,6 @@ func (that *PopThat) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PopTemp struct {
-    VMCommand
     Index int
 }
 
@@ -337,7 +322,6 @@ func (temp *PopTemp) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PopPointer struct {
-    VMCommand
     Index int
 }
 
@@ -353,7 +337,6 @@ func (pointer *PopPointer) TranslateToAssembly(translator *Translator) []string 
 }
 
 type PushLocal struct {
-    VMCommand
     Index int
 }
 
@@ -362,7 +345,6 @@ func (local *PushLocal) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PushTemp struct {
-    VMCommand
     Index int
 }
 
@@ -380,7 +362,6 @@ func (temp *PushTemp) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PushThis struct {
-    VMCommand
     Index int
 }
 
@@ -389,7 +370,6 @@ func (this *PushThis) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PushThat struct {
-    VMCommand
     Index int
 }
 
@@ -398,7 +378,6 @@ func (that *PushThat) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PushArgument struct {
-    VMCommand
     Index int
 }
 
@@ -407,7 +386,6 @@ func (argument *PushArgument) TranslateToAssembly(translator *Translator) []stri
 }
 
 type PushPointer struct {
-    VMCommand
     Index int
 }
 
@@ -425,7 +403,6 @@ func (pointer *PushPointer) TranslateToAssembly(translator *Translator) []string
 }
 
 type PushStatic struct {
-    VMCommand
     Index int
 }
 
@@ -442,7 +419,6 @@ func (static *PushStatic) TranslateToAssembly(translator *Translator) []string {
 }
 
 type PopStatic struct {
-    VMCommand
     Index int
 }
 
@@ -457,7 +433,6 @@ func (static *PopStatic) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Label struct {
-    VMCommand
     Name string
 }
 
@@ -484,7 +459,6 @@ func getPushPopParts(parts []string) (string, int, error) {
 }
 
 type IfGoto struct {
-    VMCommand
     Name string
 }
 
@@ -501,7 +475,6 @@ func (ifgoto *IfGoto) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Goto struct {
-    VMCommand
     Name string
 }
 
@@ -513,7 +486,6 @@ func (this *Goto) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Function struct {
-    VMCommand
     Name string
     Locals int
 }
@@ -543,7 +515,6 @@ func (function *Function) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Return struct {
-    VMCommand
 }
 
 func (ret *Return) TranslateToAssembly(translator *Translator) []string {
@@ -616,7 +587,6 @@ func (ret *Return) TranslateToAssembly(translator *Translator) []string {
 }
 
 type Call struct {
-    VMCommand
     Name string
     Arguments int
 }
