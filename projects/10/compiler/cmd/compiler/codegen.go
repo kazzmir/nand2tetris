@@ -10,6 +10,27 @@ type FunctionGenerator struct {
     /* Map a variable to a local slot */
     LocalVariables map[string]int
     LocalCount int
+    Parameters map[string]int
+    ParameterCount int
+}
+
+func (function *FunctionGenerator) RegisterParameter(name string){
+    function.Parameters[name] = function.ParameterCount
+    function.ParameterCount += 1
+}
+
+func (function *FunctionGenerator) IsParameter(name string) bool {
+    _, ok := function.Parameters[name]
+    return ok
+}
+
+func (function *FunctionGenerator) GetParameter(name string) int {
+    index, ok := function.Parameters[name]
+    if !ok {
+        return -1
+    }
+
+    return index
 }
 
 func (function *FunctionGenerator) RegisterVariable(name string){
@@ -98,7 +119,23 @@ func (function *FunctionGenerator) VisitNull(ast *ASTNull) (interface{}, error) 
 }
 
 func (function *FunctionGenerator) VisitOperator(ast *ASTOperator) (interface{}, error) {
-    return nil, fmt.Errorf("function generator: operator unimplemented")
+    _, err := ast.Left.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    _, err = ast.Right.Visit(function)
+    if err != nil {
+        return nil, err
+    }
+
+    switch ast.Operator {
+    case TokenPlus:
+        function.CodeGenerator.Emit <- "add"
+        return nil, nil
+    }
+
+    return nil, fmt.Errorf("function generator: unknown operator %v", ast.Operator)
 }
 
 func (function *FunctionGenerator) VisitReference(ast *ASTReference) (interface{}, error) {
@@ -106,6 +143,11 @@ func (function *FunctionGenerator) VisitReference(ast *ASTReference) (interface{
 
     if function.IsLocal(ast.Name) {
         emitter <- fmt.Sprintf("push local %v", function.GetLocal(ast.Name))
+        return nil, nil
+    }
+
+    if function.IsParameter(ast.Name) {
+        emitter <- fmt.Sprintf("push argument %v", function.GetParameter(ast.Name))
         return nil, nil
     }
 
@@ -157,9 +199,21 @@ func (function *FunctionGenerator) VisitString(ast *ASTString) (interface{}, err
 }
 
 func (function *FunctionGenerator) VisitMethodCall(ast *ASTMethodCall) (interface{}, error) {
-    _, err := ast.Left.Visit(function)
-    if err != nil {
-        return nil, err
+    var name string
+
+    reference, ok := ast.Left.(*ASTReference)
+    if ok {
+        /* could be a local variable */
+        if reference.Name == function.CodeGenerator.ClassName {
+            name = fmt.Sprintf("%v.%v", reference.Name, ast.Call.Name)
+        } else {
+            return nil, fmt.Errorf("unhandled method call for %v", ast.ToSExpression())
+        }
+    } else {
+        _, err := ast.Left.Visit(function)
+        if err != nil {
+            return nil, err
+        }
     }
 
     for _, argument := range ast.Call.Arguments {
@@ -169,7 +223,7 @@ func (function *FunctionGenerator) VisitMethodCall(ast *ASTMethodCall) (interfac
         }
     }
 
-    function.CodeGenerator.Emit <- fmt.Sprintf("call %v %v", ast.Call.Name, len(ast.Call.Arguments))
+    function.CodeGenerator.Emit <- fmt.Sprintf("call %v %v", name, len(ast.Call.Arguments))
     return nil, nil
 }
 
@@ -195,6 +249,10 @@ func (function *FunctionGenerator) VisitFunction(ast *ASTFunction) (interface{},
     localEmitter := make(chan string, 10)
     savedEmit := function.CodeGenerator.Emit
     function.CodeGenerator.Emit = localEmitter
+
+    for _, parameter := range ast.Parameters {
+        function.RegisterParameter(parameter.Name)
+    }
 
     /* Have to process the body first to find out how many locals there are */
     var functionError error
@@ -335,6 +393,7 @@ func (generator *CodeGenerator) VisitFunction(ast *ASTFunction) (interface{}, er
     function := FunctionGenerator{
         CodeGenerator: generator,
         LocalVariables: make(map[string]int),
+        Parameters: make(map[string]int),
     }
 
     return ast.Visit(&function)

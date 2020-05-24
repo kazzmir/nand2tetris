@@ -78,3 +78,43 @@ func TestSimpleLet(test *testing.T){
     }
 }
 
+func TestFunctionCall(test *testing.T){
+    text := `
+class x {
+  function int bar(int m) {
+    return m + 2;
+  }
+
+  function void foo(){
+    var int z, y;
+    let y = 1;
+    let z = x.bar(y);
+    return;
+  }
+}
+`
+    generated, err := doCodeGen(text)
+    if err != nil {
+        test.Fatalf("could not generate code: %v", err)
+    }
+
+    expected := []string{
+        "function x.bar 0",
+        "push argument 0",
+        "push constant 2",
+        "add",
+        "return",
+        "function x.foo 2",
+        "push constant 1",
+        "pop local 1",
+        "push local 1",
+        "call x.bar 1",
+        "pop local 0",
+        "push constant 0",
+        "return",
+    }
+
+    if !compareCode(generated, expected) {
+        test.Fatalf("unexpected generated code: actual %v vs expected %v\n", generated, expected)
+    }
+}
