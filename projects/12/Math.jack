@@ -11,10 +11,29 @@ class Math {
 
     /** Initializes the library. */
     function void init() {
+        return;
     }
 
     /** Returns the absolute value of x. */
     function int abs(int x) {
+        if (x < 0){
+            return -x;
+        }
+
+        return x;
+    }
+
+    function bool bit(int y, int i) {
+        var int use;
+        var int i2;
+        let i2 = i;
+        let use = 1;
+        while (i2 > 0){
+            let use = use + use;
+            let i2 = i2 - 1;
+        }
+
+        return (y&use) = use;
     }
 
     /** Returns the product of x and y. 
@@ -23,6 +42,22 @@ class Math {
      *  the Jack expressions x*y and multiply(x,y) return the same value.
      */
     function int multiply(int x, int y) {
+        var int total, shiftedX;
+        var int i;
+        let total = 0;
+        let shiftedX = x;
+        let i = 0;
+
+        while (i < 16){
+            if (Math.bit(y, i)){
+                let total = total + shiftedX;
+            }
+
+            let shiftedX = shiftedX + shiftedX;
+            let i = i + 1;
+        }
+
+        return total;
     }
 
     /** Returns the integer part of x/y.
@@ -31,17 +66,68 @@ class Math {
      *  the Jack expressions x/y and divide(x,y) return the same value.
      */
     function int divide(int x, int y) {
+        var int q;
+        var int y2;
+        if (y > x) {
+            return 0;
+        }
+        let y2 = y + y;
+        let q = Math.divide(x, y2);
+
+        if ((x - (q * y2)) < y){
+            return 2 * q;
+        }
+
+        return (2*q) + 1;
+    }
+
+    function int pow(int a, int b){
+        var int total;
+        var int b2;
+        let total = 1;
+        let b2 = b;
+        while (b2 > 0){
+            let total = total * a;
+            let b2 = b2 - 1;
+        }
+
+        return total;
     }
 
     /** Returns the integer part of the square root of x. */
     function int sqrt(int x) {
+        var int y;
+        var int n;
+        var int j2;
+        var int y2;
+
+        let n = 7;
+        while (n > -1){
+            let j2 = Math.pow(2, n);
+            let y2 = y + j2;
+            if (~((y2*y2) > x)){
+                let y = y2;
+            }
+
+            let n = n - 1;
+        }
+
+        return y;
     }
 
     /** Returns the greater number. */
     function int max(int a, int b) {
+        if (a > b){
+            return a;
+        }
+        return b;
     }
 
     /** Returns the smaller number. */
     function int min(int a, int b) {
+        if (a < b){
+            return a;
+        }
+        return b;
     }
 }
