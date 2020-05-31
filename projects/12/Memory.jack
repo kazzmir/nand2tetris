@@ -11,12 +11,15 @@
 class Memory {
 
     static Array ram;
-    static int free;
+    static Array free;
+    /* maximum ram address = 0x4000 = 16384 */
 
     /** Initializes the class. */
     function void init() {
         let ram = 0;
         let free = 2048;
+        let free[0] = 0;
+        let free[1] = 16384 - 2048 - 2;
         return;
     }
 
@@ -34,15 +37,45 @@ class Memory {
     /** Finds an available RAM block of the given size and returns
      *  a reference to its base address. */
     function int alloc(int size) {
-        var int out;
-        let out = free;
-        let free = free + size;
-        return out;
+        var Array next, start, previous;
+        var int freeNext;
+
+        let previous = 0;
+        let start = free;
+        while (~(start = 0)){
+            if (start[1] > (size + 2)){
+                /* the next free block */
+                let next = start + 2 + size;
+                let next[0] = start[0];
+                let next[1] = start[1] - size - 2;
+
+                if (~(previous = 0)){
+                    let previous[0] = next;
+                } else {
+                    let free = next;
+                }
+
+                /* the allocated block */
+                let start[0] = 0;
+                let start[1] = size;
+
+                return start + 2;
+            }
+
+            let previous = start;
+            let start = start[0];
+        }
+
+        return 0;
     }
 
     /** De-allocates the given object (cast as an array) by making
      *  it available for future allocations. */
     function void deAlloc(Array o) {
+        var Array metadata;
+        let metadata = o - 2;
+        let metadata[0] = free;
+        let free = metadata;
         return;
     }    
 }
