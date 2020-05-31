@@ -4,6 +4,7 @@ import (
     "os"
     "fmt"
     "bufio"
+    "strings"
     "time"
     // "strings"
 
@@ -44,6 +45,14 @@ func lex(path string) error {
     return nil
 }
 
+func replaceExtension(path string, ending string, newEnding string) string {
+    if strings.HasSuffix(path, ending) {
+        return fmt.Sprintf("%v%v", path[0:len(path)-len(ending)], newEnding)
+    }
+
+    return path
+}
+
 func compile(path string) error {
     file, err := os.Open(path)
     if err != nil {
@@ -66,7 +75,9 @@ func compile(path string) error {
     fmt.Printf("%v\n", ast.ToSExpression())
     */
 
-    output, err := os.Create("out.vm")
+    outPath := replaceExtension(path, ".jack", ".vm")
+
+    output, err := os.Create(outPath)
     if err != nil {
         return err
     }
@@ -84,6 +95,7 @@ func compile(path string) error {
 
     end = time.Now()
     fmt.Printf("Codegen %v in %v\n", path, end.Sub(start))
+    fmt.Printf("Wrote to %v\n", outPath)
 
     return nil
 }
