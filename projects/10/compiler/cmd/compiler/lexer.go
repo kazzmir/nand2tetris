@@ -504,6 +504,7 @@ func (machine *StringMachine) Token(line uint64, start uint64, end uint64) (Toke
 func (machine *StringMachine) Reset() {
     machine.Quote = 0
     machine.stopped = false
+    machine.Text.Reset()
 }
 
 func makeIdentifierMachine() LexerStateMachine {

@@ -420,6 +420,11 @@ func (ast *ASTConstant) Kind() Kind {
 
 type ASTReference struct {
     Name string
+    Location string
+}
+
+func (ast *ASTReference) SourceLocation() string {
+    return ast.Location
 }
 
 func (ast *ASTReference) Visit(visitor ASTVisitor) (interface{}, error) {
@@ -1112,7 +1117,7 @@ func parseExpressionNoOp(tokens *TokenStream) (ASTExpression, error) {
                 case TokenThis:
                     left = &ASTThis{}
                 case TokenIdentifier:
-                    left = &ASTReference{Name: id.Value}
+                    left = &ASTReference{Name: id.Value, Location: fmt.Sprintf("line %v", id.Line)}
                 default:
                     return nil, fmt.Errorf("unknown token on the left side of a dot expression: %v", id.String())
             }

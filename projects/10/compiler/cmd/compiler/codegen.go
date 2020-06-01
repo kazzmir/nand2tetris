@@ -306,7 +306,7 @@ func (function *FunctionGenerator) VisitReference(ast *ASTReference) (interface{
         return nil, nil
     }
 
-    return nil, fmt.Errorf("function generator: unknown reference %v", ast.Name)
+    return nil, fmt.Errorf("function generator: unknown reference %v at %v", ast.Name, ast.SourceLocation())
 }
 
 func (function *FunctionGenerator) VisitReturn(ast *ASTReturn) (interface{}, error) {
@@ -766,7 +766,7 @@ func (generator *CodeGenerator) VisitConstructor(ast *ASTConstructor) (interface
         CodeGenerator: generator,
         LocalVariables: make(map[string]VariableMapping),
         Parameters: make(map[string]VariableMapping),
-        ParameterCount: 1,
+        ParameterCount: 0,
         Preamble: []string{
             fmt.Sprintf("push constant %v", classSize),
             "call Memory.alloc 1",
