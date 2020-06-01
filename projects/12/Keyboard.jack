@@ -48,6 +48,7 @@ class Keyboard {
     function char readChar() {
         var char c;
         while (Keyboard.keyPressed() = 0){
+            do Sys.wait(1);
         }
 
         let c = Keyboard.keyPressed();
@@ -55,6 +56,7 @@ class Keyboard {
         do Output.printChar(c);
 
         while (Keyboard.keyPressed() = c){
+            do Sys.wait(1);
         }
 
         return c;
