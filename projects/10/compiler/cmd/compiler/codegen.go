@@ -466,6 +466,9 @@ func (function *FunctionGenerator) VisitLet(ast *ASTLet) (interface{}, error) {
     } else if function.IsLocal(ast.Name) {
         function.CodeGenerator.Emit <- fmt.Sprintf("pop local %v", function.GetLocal(ast.Name))
         return nil, nil
+    } else if function.IsParameter(ast.Name) {
+        function.CodeGenerator.Emit <- fmt.Sprintf("pop argument %v", function.GetParameter(ast.Name))
+        return nil, nil
     } else if function.CodeGenerator.IsField(ast.Name) {
         function.CodeGenerator.Emit <- fmt.Sprintf("pop this %v", function.CodeGenerator.GetField(ast.Name))
         return nil, nil

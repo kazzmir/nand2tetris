@@ -11,33 +11,250 @@
  */
 class Screen {
 
+    static Array base;
+    static boolean color;
+
     /** Initializes the Screen. */
     function void init() {
+        let base = 16384;
+        let color = true;
+        return;
     }
 
     /** Erases the entire screen. */
     function void clearScreen() {
+        var int i;
+        while (i < 8192){
+            let base[i] = 0;
+            let i = i + 1;
+        }
+
+        return;
     }
 
     /** Sets the current color, to be used for all subsequent drawXXX commands.
      *  Black is represented by true, white by false. */
     function void setColor(boolean b) {
+        let color = b;
+        return;
     }
 
     /** Draws the (x,y) pixel, using the current color. */
     function void drawPixel(int x, int y) {
+        var int pixel, place, bit, value;
+        let place = (y*32) + (x / 16);
+        let value = 1;
+        let bit = x&15;
+        while (bit > 0){
+            let value = value + value;
+            let bit = bit - 1;
+        }
+        let pixel = base[place];
+        if (color){
+            let pixel = pixel | value;
+        } else {
+            let pixel = pixel & (~value);
+        }
+
+        let base[place] = pixel;
+
+        return;
+    }
+
+    function void drawVerticalLine(int x, int y1, int y2){
+        var int y;
+        let y = y1;
+        while (y < (y2+1)){
+            do Screen.drawPixel(x, y);
+            let y = y + 1;
+        }
+        return;
+    }
+
+    /* naive slow method */
+    function void drawHorizontalLine2(int y, int x1, int x2){
+        var int x;
+        let x = x1;
+        while (~(x > x2)){
+            do Screen.drawPixel(x, y);
+            let x = x + 1;
+        }
+        return;
+    }
+
+    /* draw 16 pixels at a time, except for the ends.
+     * this a little buggy in that it draws extra pixels at each end.
+     */
+    function void drawHorizontalLine(int y, int x1, int x2){
+        var int startX, endX;
+        var int sX, eX;
+        var int yStart;
+        var int i;
+
+        /* special case if the total line length does not span an entire 16-bit pixel */
+        if ((x2-x1) < 16){
+            while (x1 < x2){
+                do Screen.drawPixel(x1, y);
+                let x1 = x1 + 1;
+            }
+            return;
+        }
+
+        if ((x1&15) > 0){
+            let startX = (x1&(~15)) + 16;
+        } else {
+            let startX = x1;
+        }
+
+        let yStart = y * 32;
+
+        let i = x1;
+        while (i < startX){
+            do Screen.drawPixel(i, y);
+            let i = i + 1;
+        }
+
+        let endX = x2 & (~15);
+        /*
+        if (~((x2&15) = 0)){
+            let endX = x2 & 15;
+        } else {
+            let endX = x2;
+        }
+        */
+
+        let sX = startX / 16;
+        let eX = endX / 16;
+        while (sX < eX){
+            if (color){
+                let base[yStart + sX] = -1;
+            } else {
+                let base[yStart + sX] = 0;
+            }
+
+            let sX = sX + 1;
+        }
+
+        let i = endX;
+        while (~(i > x2)){
+            do Screen.drawPixel(i, y);
+            let i = i + 1;
+        }
+
+        return;
     }
 
     /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
     function void drawLine(int x1, int y1, int x2, int y2) {
+        var int diff;
+        var int dx, dy;
+        var int i;
+        var int x, y;
+        var int yInc;
+
+        if (x1 = x2){
+            do Screen.drawVerticalLine(x1, Math.min(y1, y2), Math.max(y1, y2));
+            return;
+        }
+
+        if (y1 = y2){
+            do Screen.drawHorizontalLine(y1, Math.min(x1, x2), Math.max(x1, x2));
+            return;
+        }
+
+        /* swap coordinates */
+        if (x1 > x2){
+            let i = x1;
+            let x1 = x2;
+            let x2 = i;
+            let i = y1;
+            let y1 = y2;
+            let y2 = i;
+        }
+
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+
+        let x = 0;
+        let y = 0;
+        let diff = 0;
+
+        if (y2 > y1){
+            let yInc = 1;
+        } else {
+            let yInc = -1;
+        }
+
+        while ((x<dx) & (y<Math.abs(dy))){
+            do Screen.drawPixel(x1 + x, y1 + y);
+
+            /* when moving from x1,y1 to x2,y2 where x1<x2 and y1<y2
+             * if y/x > dy/dx, then the angle of the current estimated line
+             * is too high, so increase x by 1.
+             * if y/x < dy/dx, then the angle of the current estimated line
+             * is too low, so increase y by 1.
+             *
+             * if y2<y1 then the line is going up and to the right in our coordinate system.
+             * if y/x < dy/dx, then increase y by 1
+             * if y/x > dy/dx, then increase x by 1
+             *
+             * y/x > dy/dx, y*dx > x*dy
+             * y*dx - x*dy > 0
+             *
+             * if y2<y1 then the line is going down and to the right
+             * if y/x > -dy/dx, then decrease y by 1
+             * y/x > -dy/dx, y*dx > -dy * x
+             * y*dx + x*dy > 0
+             * else increase x by 1
+             */
+
+            /* when y1 < y2 */
+
+            if (diff > 0){
+                let x = x + 1;
+                let diff = diff - Math.abs(dy);
+            } else {
+                let y = y + yInc;
+                let diff = diff + dx;
+            }
+        }
+
+        return;
     }
 
     /** Draws a filled rectangle whose top left corner is (x1, y1)
      * and bottom right corner is (x2,y2), using the current color. */
     function void drawRectangle(int x1, int y1, int x2, int y2) {
+        while (y1 < y2){
+            do Screen.drawHorizontalLine(y1, x1, x2);
+            let y1 = y1 + 1;
+        }
+
+        return;
     }
 
     /** Draws a filled circle of radius r<=181 around (x,y), using the current color. */
     function void drawCircle(int x, int y, int r) {
+        var int dr;
+        var int h;
+        let dr = 0;
+        while (dr < r){
+            let h = Math.sqrt((r*r) - (dr*dr));
+            do Screen.drawHorizontalLine(y-dr, x-h, x+h);
+            if (dr > 0){
+                do Screen.drawHorizontalLine(y+dr, x-h, x+h);
+            }
+            let dr = dr + 1;
+        }
+        /*
+        let y1 = y - r;
+        let y2 = y + r;
+        while (y1 < y2){
+            let h = Math.sqrt(r*r - (y-y1)*(y-y1));
+            do Screen.drawHorizontalLine(y1, x-h, x+h);
+            let y1 = y1 + 1;
+        }
+        */
+        return;
     }
 }
