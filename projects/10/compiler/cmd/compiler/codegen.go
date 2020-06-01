@@ -388,6 +388,11 @@ func (function *FunctionGenerator) GetType(ast *ASTReference) (string, error) {
         return mapping.Type, nil
     }
 
+    if function.IsParameter(ast.Name) {
+        mapping := function.Parameters[ast.Name]
+        return mapping.Type, nil
+    }
+
     if function.CodeGenerator.IsField(ast.Name) {
         mapping := function.CodeGenerator.Fields[ast.Name]
         return mapping.Type, nil

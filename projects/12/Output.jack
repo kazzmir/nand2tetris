@@ -18,9 +18,23 @@ class Output {
 
     // Character map for displaying characters
     static Array charMaps; 
+    static int cursorX, cursorY;
+    static Array base;
+    static Array backspace; // used to hold an empty glyph
 
     /** Initializes the screen, and locates the cursor at the screen's top-left. */
     function void init() {
+        var int i;
+        let cursorX = 0;
+        let cursorY = 0;
+        let base = 16384;
+        do Output.initMap();
+        let backspace = Array.new(11);
+        while (i < 11) {
+            let backspace[i] = 0;
+            let i = i + 1;
+        }
+        return;
     }
 
     // Initializes the character map array
@@ -71,7 +85,7 @@ class Output {
         do Output.create(64,30,51,51,59,59,59,27,3,30,0,0);  // @
         do Output.create(63,30,51,51,24,12,12,0,12,12,0,0);  // ?
 
-        do Output.create(65,0,0,0,0,0,0,0,0,0,0,0);          // A ** TO BE FILLED **
+        do Output.create(65,12,30,51,51,63,63,51,51,51,0,0);          // A ** TO BE FILLED **
         do Output.create(66,31,51,51,51,31,51,51,51,31,0,0); // B
         do Output.create(67,28,54,35,3,3,3,35,54,28,0,0);    // C
         do Output.create(68,15,27,51,51,51,51,51,27,15,0,0); // D
@@ -137,15 +151,15 @@ class Output {
         do Output.create(125,7,12,12,12,56,12,12,12,7,0,0);    // }
         do Output.create(126,38,45,25,0,0,0,0,0,0,0,0);        // ~
 
-	return;
+        return;
     }
 
     // Creates the character map array of the given character index, using the given values.
     function void create(int index, int a, int b, int c, int d, int e,
                          int f, int g, int h, int i, int j, int k) {
-	var Array map;
+        var Array map;
 
-	let map = Array.new(11);
+        let map = Array.new(11);
         let charMaps[index] = map;
 
         let map[0] = a;
@@ -176,28 +190,111 @@ class Output {
     /** Moves the cursor to the j-th column of the i-th row,
      *  and erases the character displayed there. */
     function void moveCursor(int i, int j) {
+        let cursorX = j;
+        let cursorY = i;
+        return;
+    }
+
+    function void renderChar(Array what){
+        var int y;
+        var int yPos, xPos;
+        var int value;
+        var int clear;
+        
+        /* keep one side of the pixels in this spot, but clear the space
+         * for the current glyph to be rendered
+         */
+        if ((cursorX&1) = 1){
+            /* rendering the glyph on the right, so keep the lower 8 bits which
+             * is the glyph on the left
+             */
+            let clear = 255;
+        } else {
+            /* rendering the glyph on the left, so keep the upper 8 bits on the right */
+            let clear = ~255;
+        }
+
+        while (y < 11){
+            let yPos = ((cursorY*11)+y)*32;
+            /* The x cursor points at half a pixel. We can multiply the x position by 8
+             * because both positions (0) and (1) map to screen coordinate 0. Position (2)
+             * then maps to screen coordinate 1. Alternatively we could say
+             *   ((cursorX&(~1)) * 8 + (cursorX&1)*4) / 16
+             * but the (cursorX&1)*4) expression will not push the screen coordinate over 16,
+             * meaning it gets wiped out by the /16 anyway.
+             */
+            let xPos = (cursorX*8)/16;
+            let value = what[y];
+            if ((cursorX&1) = 1){
+                let value = value * 256;
+            }
+            let base[yPos + xPos] = (base[yPos+xPos]&clear) + value;
+            let y = y + 1;
+        }
+
+        return;
     }
 
     /** Displays the given character at the cursor location,
      *  and advances the cursor one column forward. */
     function void printChar(char c) {
+        var Array what;
+        let what = Output.getMap(c);
+
+        do Output.renderChar(what);
+        
+        let cursorX = cursorX + 1;
+        if (cursorX > 63){
+            let cursorX = 0;
+            let cursorY = cursorY + 1;
+            if (cursorY > 22){
+                let cursorX = 0;
+                let cursorY = 0;
+            }
+        }
+
+        return;
     }
 
     /** displays the given string starting at the cursor location,
      *  and advances the cursor appropriately. */
     function void printString(String s) {
+        var int i;
+        var int length;
+        let length = s.length();
+        while (i < length){
+            do Output.printChar(s.charAt(i));
+            let i = i + 1;
+        }
+
+        return;
     }
 
     /** Displays the given integer starting at the cursor location,
      *  and advances the cursor appropriately. */
     function void printInt(int i) {
+        var String s;
+        let s = String.new(6);
+        do s.setInt(i);
+        do Output.printString(s);
+        do s.dispose();
+        return;
     }
 
     /** Advances the cursor to the beginning of the next line. */
     function void println() {
+        let cursorX = 0;
+        let cursorY = cursorY + 1;
+        return;
     }
 
     /** Moves the cursor one column back. */
     function void backSpace() {
+        let cursorX = cursorX - 1;
+        if (cursorX < 0){
+            let cursorX = 0;
+        }
+        do Output.renderChar(backspace);
+        return;
     }
 }
