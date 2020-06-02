@@ -1,0 +1,28 @@
+Nand2Tetris implemented in Go
+By Jon Rafkind jon@rafkind.com
+
+nand2tetris: https://www.nand2tetris.org/
+coursera courses:
+  part1: https://www.coursera.org/learn/build-a-computer
+  part2: https://www.coursera.org/learn/nand2tetris2/
+
+Project 1: Building basic logic gates using NAND as a basic block
+Project 2: Building higher level logic gates such as adders and an ALU
+Project 3: Implement memory hardware and the pc counter
+Project 4: Some Hack assembly programming
+Project 5: Implement a CPU that combines the other primitive hardware components
+Project 6: Implement an assembler (in go)
+Project 7 and 8: Implement a vm translator that compiles to Hack assembly
+Project 9: Implement a simple Pong game in Jack
+Project 10 and 11: Implement a Jack compiler to the vm language
+Project 12: Implement the basic OS classes that provide the Jack runtime
+
+Until doing this project my education and experience had mostly been related to aspects starting from roughly project 7 and up, so I appreciate learning more about hardware from projects 1-6. The first 5 projects are fairly accessible even to those without a computer background. Projects 6 and up require a fair bit of programming, and probably require at least some previous programming experience to get through them.
+
+My solutions for the projects stay fairly close to what the intended solution was, except for the compiler projects 10 and 11, where I implemented a proper abstract syntax tree and a recursive descent parser.
+
+After completing project 12 I went back and tried to run my pong game from project 9 using the OS classes I had implemented (and everything compiled with my own compiler). The pong game is able to render a frame successfuly, but the actual game is too slow to play, most likely because the graphics primitives are not efficient enough. Well, maybe I will improve this further another day..
+
+Using go to implement all the programming projects was a reasonable choice. I like that go compiles quickly, has static types, produces a single static binary, and doesn't get in my way. The lack of generics did not hinder me that much.
+
+Thank you Shimon Schocken, Noam Nisan, and the rest of the Nand2Tetris team.
